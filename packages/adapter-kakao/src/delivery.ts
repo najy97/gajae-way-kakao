@@ -1,7 +1,24 @@
 import { type ChatMessagePayload, type ChatProgressPayload, type OriginRef, originKey } from "@gajae-gateway/protocol";
-import { KAKAO_REQUEST_TIMEOUT_MS, KakaoApiError, type KakaoBotApi } from "./api";
+import {
+	KAKAO_MAX_MENTIONS,
+	KAKAO_REQUEST_TIMEOUT_MS,
+	KakaoApiError,
+	type KakaoBotApi,
+	type KakaoMentions,
+} from "./api";
 import { batches, toBubbles } from "./bubbles";
 import type { KakaoAdapterState } from "./state";
+
+/** Mention placeholder prefix for the people a group-room reply answers (asker1, asker2, ...). */
+const ASKER = "asker";
+
+/**
+ * Model text must never become Kakao template syntax: a literal `{{#mentions.x}}` would
+ * otherwise let a prompt-injected reply mention or break against arbitrary keys.
+ */
+export function neutralizeMentionSyntax(text: string): string {
+	return text.replaceAll("{{#", "{ {#");
+}
 
 export interface GatewayRequester {
 	request<T = unknown>(verb: string, params?: unknown): Promise<T>;
@@ -22,6 +39,7 @@ const realClock: DeliveryClock = {
 interface BufferedDelivery {
 	readonly deliveryId: string;
 	readonly text: string;
+	readonly askerIds: readonly string[];
 }
 
 /** Callback credentials are single-use and intentionally expire before Kakao's five-minute limit. */
@@ -58,6 +76,7 @@ export class KakaoDelivery {
 		buffer.push({
 			deliveryId: message.deliveryId,
 			text: `${message.duplicateWarning ? "[복구됨, 중복일 수 있음] " : ""}${message.text}`,
+			askerIds: message.askerIds ?? [],
 		});
 		this.#buffers.set(key, buffer);
 		const token = this.#usableToken(message.origin);
@@ -170,7 +189,7 @@ export class KakaoDelivery {
 	async #deliver(origin: OriginRef, buffer: readonly BufferedDelivery[]): Promise<void> {
 		if (this.#stopped) return;
 		const key = originKey(origin);
-		const bubbles = toBubbles(
+		const text = neutralizeMentionSyntax(
 			buffer
 				.map((entry) => entry.text)
 				.filter(Boolean)
@@ -178,7 +197,24 @@ export class KakaoDelivery {
 		);
 		const route = this.state.routeFor(origin);
 		const token = this.#usableToken(origin);
-		const path = token ? "callback" : "send_message";
+		// A group-room reply (channel chat has no mentions) mentions the people the gateway
+		// says its turn answered. A reply without that attribution goes out unmentioned.
+		const askers =
+			text && route && !route.channelChatroom
+				? [...new Set(buffer.flatMap((entry) => entry.askerIds))].slice(-KAKAO_MAX_MENTIONS)
+				: [];
+		const mentions: KakaoMentions | undefined =
+			askers.length > 0 ? Object.fromEntries(askers.map((id, index) => [`${ASKER}${index + 1}`, id])) : undefined;
+		const plain = toBubbles(text);
+		let bubbles = mentions
+			? toBubbles(
+					text,
+					`${Object.keys(mentions)
+						.map((name) => `{{#mentions.${name}}}`)
+						.join(" ")} `,
+				)
+			: plain;
+		let path = token ? "callback" : "send_message";
 		let posted = false;
 		let failure: { reason: string; ambiguous: boolean } | undefined;
 		let result = "confirmed";
@@ -186,13 +222,27 @@ export class KakaoDelivery {
 			try {
 				if (bubbles.length > 0) {
 					if (!route) throw new KakaoApiError(400, "Kakao origin has no reply route");
-					const groups = batches(bubbles);
-					for (const [index, group] of groups.entries()) {
-						if (index === 0 && token) {
-							this.state.takeToken(origin);
-							await this.bot.callback(token.token, group);
-						} else {
-							await this.bot.sendMessage(route, group);
+					if (token) this.state.takeToken(origin);
+					let groups = batches(bubbles);
+					for (let index = 0; index < groups.length; index++) {
+						const group = groups[index] as string[];
+						if (index > 0) await this.bot.sendMessage(route, group);
+						else {
+							try {
+								// Placeholders open the text, so only the first request carries mentions.
+								if (token) await this.bot.callback(token.token, group, mentions);
+								else await this.bot.sendMessage(route, group, mentions);
+							} catch (error) {
+								// Kakao refused the mentioned request outright (a definitive refusal posts
+								// nothing). The mention must not cost the answer: send it plain, once,
+								// through send_message, because a callback token is single-use.
+								if (!mentions || !(error instanceof KakaoApiError)) throw error;
+								this.log.error(`kakao_delivery origin=${key} result=mention_refused`);
+								bubbles = plain;
+								groups = batches(bubbles);
+								path = `${path}+send_message`;
+								await this.bot.sendMessage(route, groups[0] as string[]);
+							}
 						}
 						posted = true;
 					}

@@ -99,6 +99,22 @@ test("positive partial sends are ambiguous, including a short send count without
 	}
 });
 
+test("positive sends are ambiguous even under a 4xx or a nonzero code", async () => {
+	for (const response of [
+		() => Response.json({ totalCount: 1, sendCount: 1, errorCount: 0 }, { status: 400 }),
+		() => Response.json({ totalCount: 1, sendCount: 1, errorCount: 0, code: -1 }),
+	]) {
+		const bot = new KakaoBotApi("secret", async () => response());
+		try {
+			await bot.callback("callback", ["only"]);
+			throw new KakaoApiError(0, "expected failure");
+		} catch (error) {
+			expect(error).not.toBeInstanceOf(KakaoApiError);
+			expect((error as Error).message).toContain("partial");
+		}
+	}
+});
+
 test("request timeout covers stalled fetch and stalled response body", async () => {
 	for (const fetcher of [
 		async () => new Promise<Response>(() => {}),
@@ -143,4 +159,22 @@ test("every failure redacts bot and callback credentials, including thrown netwo
 				expect(message).not.toContain(secret);
 		}
 	}
+});
+
+test("mentions become SkillResponse extra.mentions keyed by placeholder with botUserKey ids", async () => {
+	const bodies: Record<string, unknown>[] = [];
+	const bot = new KakaoBotApi("secret", async (_url, init) => {
+		bodies.push(JSON.parse(String(init?.body)));
+		return success();
+	});
+	await bot.callback("callback", ["{{#mentions.asker}} hi"], { asker: "bu2_asker" });
+	await bot.callback("callback", ["plain"], {});
+	expect(bodies[0]).toEqual({
+		skillResponse: {
+			version: "2.0",
+			template: { outputs: [{ simpleText: { text: "{{#mentions.asker}} hi" } }] },
+			extra: { mentions: { asker: { type: "botUserKey", id: "bu2_asker" } } },
+		},
+	});
+	expect((bodies[1]?.skillResponse as Record<string, unknown>).extra).toBeUndefined();
 });

@@ -565,6 +565,32 @@ export class InboxGroup {
 			.run(tx, JSON.stringify({ none: reason }), opRef);
 	}
 
+	/**
+	 * Author ids of the inbound messages turn `opRef` has taken in so far: its
+	 * triggers and accepted steers, distinct, in arrival order. A steer still
+	 * `bound` has an unknown outcome and is not counted: a missed mention is
+	 * harmless, a wrong one is not. Rows without engagement have no author.
+	 */
+	turnAuthorIds(opRef: string): string[] {
+		const rows = this.#db
+			.prepare(
+				"SELECT engagement_json FROM inbound_messages WHERE turn_op_ref = ? AND (turn_role = 'trigger' OR (turn_role = 'steer' AND turn_state = 'done')) ORDER BY received_at, rowid",
+			)
+			.all(opRef) as { engagement_json: string | null }[];
+		const authors: string[] = [];
+		for (const row of rows) {
+			if (!row.engagement_json) continue;
+			let authorId: unknown;
+			try {
+				authorId = (JSON.parse(row.engagement_json) as { authorId?: unknown }).authorId;
+			} catch {
+				continue;
+			}
+			if (typeof authorId === "string" && authorId !== "" && !authors.includes(authorId)) authors.push(authorId);
+		}
+		return authors;
+	}
+
 	terminalLinkAudit(sinceIso: string): { done: number; unlinked: number } {
 		const row = this.#db
 			.prepare(

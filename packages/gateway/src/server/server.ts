@@ -3254,6 +3254,8 @@ async function createInboundTurnLifecycle(
 	const effectiveModel = modelOverride ?? runtime.config.model;
 
 	const deliveredParts: string[] = [];
+	/** Authors of the messages this turn has taken in, stamped on every reply it makes here. */
+	const askerIds = () => options.database.inbox.turnAuthorIds(input.turn.opRef);
 	/** Ledger ids of every text part and reaction this turn put on the wire, in order. */
 	const deliveredIds: string[] = [];
 	/**
@@ -3309,7 +3311,15 @@ async function createInboundTurnLifecycle(
 			) !== deliveryId
 		)
 			return;
-		const payload = runtime.delivery.prepare(crypto.randomUUID(), origin, text, undefined, deliveryId);
+		const payload = runtime.delivery.prepare(
+			crypto.randomUUID(),
+			origin,
+			text,
+			undefined,
+			deliveryId,
+			true,
+			askerIds(),
+		);
 		if (!payload) return;
 		deliveredParts.push(text);
 		assistantDeliveryStarted = true;
@@ -3550,7 +3560,15 @@ async function createInboundTurnLifecycle(
 	 */
 	const deliverFiles = async (paths: readonly string[], replyTo: string | undefined) => {
 		const notify = (deliveryId: string, text: string) => {
-			const payload = runtime.delivery.prepare(crypto.randomUUID(), origin, text, replyTo, deliveryId, false);
+			const payload = runtime.delivery.prepare(
+				crypto.randomUUID(),
+				origin,
+				text,
+				replyTo,
+				deliveryId,
+				false,
+				askerIds(),
+			);
 			if (!payload) return;
 			deliveredIds.push(payload.deliveryId as string);
 			assistantDeliveryStarted = true;
@@ -3835,6 +3853,7 @@ async function createInboundTurnLifecycle(
 				step.replyTo,
 				deliveryId,
 				source === "terminal",
+				askerIds(),
 			);
 			if (!payload) continue;
 			deliveredParts.push(step.body);

@@ -129,6 +129,41 @@ test("a mid-turn message issues one steer, keeps one send, and is attributed in 
 	);
 });
 
+test("a turn's author ids are its trigger and accepted steers, distinct and in arrival order", async () => {
+	home = await mkdtemp(join(tmpdir(), "gajaeway-steering-"));
+	database = await Store.open(join(home, "gateway.db"));
+	const port = attachTestBrokerOwnership(
+		database,
+		new SteeringTranscriptPort({ onBind: (input) => `session-${input.originKey}-${input.epoch}` }),
+		join(home, "agent"),
+	);
+	manager = new PersonaSessionManager({
+		database,
+		port,
+		instanceId: "steering-authors-test",
+		repo: join(home, "workspace"),
+		onTurnStart: ({ trigger }) => ({ text: trigger.body }),
+	});
+
+	enqueue("from-a", "question one", { mentioned: true, group: true, authorId: "user-a" });
+	await manager.notifyInbound(ORIGIN_KEY);
+	await eventually(() => port.sends.length === 1, "initial send did not become accepted");
+	const running = port.sends[0]!;
+	expect(database.inbox.turnAuthorIds(running.opRef)).toEqual(["user-a"]);
+
+	enqueue("from-b", "question two", { mentioned: true, group: true, authorId: "user-b" });
+	await manager.notifyInbound(ORIGIN_KEY);
+	enqueue("from-a-again", "question three", { mentioned: true, group: true, authorId: "user-a" });
+	await manager.notifyInbound(ORIGIN_KEY);
+	enqueue("no-engagement", "relayed note");
+	await manager.notifyInbound(ORIGIN_KEY);
+	await eventually(() => port.steers.length === 3, "mid-turn messages were not steered");
+	expect(database.inbox.turnAuthorIds(running.opRef)).toEqual(["user-a", "user-b"]);
+	expect(database.inbox.turnAuthorIds("no-such-turn")).toEqual([]);
+
+	port.complete(running.opRef, "done");
+});
+
 test("the steer header asks for the steered message's own reply instead of folding it into the final answer", () => {
 	const framed = renderSteer("mention the rollback caveat");
 	// The window-closing header contract (#167) must survive: one bracketed line, then the body.

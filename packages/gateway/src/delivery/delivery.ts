@@ -38,6 +38,7 @@ export function buildDeliveryPayload(
 	deliveryId: string,
 	replyToMessageId?: string,
 	final = true,
+	askerIds: readonly string[] = [],
 ): ChatMessagePayload | undefined {
 	if (isSilentOutput(text)) return undefined;
 	originKey(origin);
@@ -49,6 +50,7 @@ export function buildDeliveryPayload(
 		final,
 		deliveryId,
 		...(replyToMessageId ? { replyToMessageId } : {}),
+		...(askerIds.length > 0 ? { askerIds } : {}),
 	};
 }
 
@@ -64,8 +66,9 @@ export class DeliveryService {
 		replyToMessageId?: string,
 		deliveryId: string = crypto.randomUUID(),
 		final = true,
+		askerIds: readonly string[] = [],
 	): ChatMessagePayload | undefined {
-		const payload = buildDeliveryPayload(turnId, origin, text, deliveryId, replyToMessageId, final);
+		const payload = buildDeliveryPayload(turnId, origin, text, deliveryId, replyToMessageId, final, askerIds);
 		if (!payload) return undefined;
 		if (
 			!this.#store.transaction((tx) =>

@@ -3,6 +3,12 @@ import type { KakaoReplyRoute } from "./state";
 export type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 export const KAKAO_REQUEST_TIMEOUT_MS = 15_000;
 
+/** Mention placeholders used in bubble text, mapped to the botUserKey each one names. */
+/** Kakao renders at most 15 mentions in one response. */
+export const KAKAO_MAX_MENTIONS = 15;
+
+export type KakaoMentions = Readonly<Record<string, string>>;
+
 export class KakaoApiError extends Error {
 	constructor(
 		readonly status: number,
@@ -20,15 +26,17 @@ export class KakaoBotApi {
 		private readonly timeoutMs: number = KAKAO_REQUEST_TIMEOUT_MS,
 	) {}
 
-	callback(callbackToken: string, bubbles: readonly string[]): Promise<void> {
-		return this.#post("callback", {}, bubbles, callbackToken);
+	callback(callbackToken: string, bubbles: readonly string[], mentions?: KakaoMentions): Promise<void> {
+		return this.#post("callback", {}, bubbles, callbackToken, mentions);
 	}
 
-	sendMessage(route: KakaoReplyRoute, bubbles: readonly string[]): Promise<void> {
+	sendMessage(route: KakaoReplyRoute, bubbles: readonly string[], mentions?: KakaoMentions): Promise<void> {
 		return this.#post(
 			"send_message",
 			route.channelChatroom ? { botUserKey: route.botUserKey } : { botGroupKey: route.botGroupKey },
 			bubbles,
+			undefined,
+			mentions,
 		);
 	}
 
@@ -37,6 +45,7 @@ export class KakaoBotApi {
 		target: Record<string, unknown>,
 		bubbles: readonly string[],
 		callbackToken?: string,
+		mentions?: KakaoMentions,
 	): Promise<void> {
 		const controller = new AbortController();
 		let timer: ReturnType<typeof setTimeout> | undefined;
@@ -56,6 +65,15 @@ export class KakaoBotApi {
 							skillResponse: {
 								version: "2.0",
 								template: { outputs: bubbles.map((text) => ({ simpleText: { text } })) },
+								...(mentions && Object.keys(mentions).length > 0
+									? {
+											extra: {
+												mentions: Object.fromEntries(
+													Object.entries(mentions).map(([key, id]) => [key, { type: "botUserKey", id }]),
+												),
+											},
+										}
+									: {}),
 							},
 						}),
 						signal: controller.signal,
@@ -73,13 +91,19 @@ export class KakaoBotApi {
 					const result = isObject(body) ? body : {};
 					const sent = result.sendCount;
 					const errors = result.errorCount;
+					// Any positive send count means something may be on screen, whatever the status
+					// or code says: that is never a definitive refusal a caller could resend after.
 					if (
-						response.ok &&
 						typeof sent === "number" &&
 						sent > 0 &&
-						((typeof errors === "number" && errors > 0) || sent < bubbles.length)
-					)
+						(!response.ok ||
+							(typeof result.code === "number" && result.code !== 0) ||
+							(typeof errors === "number" && errors > 0) ||
+							sent < bubbles.length)
+					) {
+						refusalStatus = undefined;
 						throw new Error(`Kakao ${method} partial delivery`);
+					}
 					if (
 						(response.status >= 400 && response.status < 500) ||
 						(typeof result.code === "number" && result.code !== 0) ||

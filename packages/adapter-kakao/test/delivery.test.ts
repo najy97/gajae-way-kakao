@@ -30,18 +30,27 @@ async function fixture(options: { token?: boolean; route?: boolean; origin?: Ori
 			return undefined as T;
 		},
 	};
-	const posted: { path: string; bubbles: readonly string[]; route?: KakaoReplyRoute }[] = [];
+	const posted: {
+		path: string;
+		bubbles: readonly string[];
+		route?: KakaoReplyRoute;
+		mentions?: Readonly<Record<string, string>>;
+	}[] = [];
 	const logs: string[] = [];
 	let callbackAction: (() => Promise<void>) | undefined;
 	let sendAction: (() => Promise<void>) | undefined;
 	const bot = {
-		async callback(_token: string, bubbles: readonly string[]) {
+		async callback(_token: string, bubbles: readonly string[], mentions?: Readonly<Record<string, string>>) {
 			expect(state.tokenFor(target)).toBeUndefined();
-			posted.push({ path: "callback", bubbles });
+			posted.push({ path: "callback", bubbles, ...(mentions ? { mentions } : {}) });
 			await callbackAction?.();
 		},
-		async sendMessage(replyRoute: KakaoReplyRoute, bubbles: readonly string[]) {
-			posted.push({ path: "send_message", bubbles, route: replyRoute });
+		async sendMessage(
+			replyRoute: KakaoReplyRoute,
+			bubbles: readonly string[],
+			mentions?: Readonly<Record<string, string>>,
+		) {
+			posted.push({ path: "send_message", bubbles, route: replyRoute, ...(mentions ? { mentions } : {}) });
 			await sendAction?.();
 		},
 	};
@@ -320,4 +329,134 @@ test("a replay received while still buffered or posting does not duplicate deliv
 	await f.delivery.flush(origin);
 	expect(f.posted[0]?.bubbles).toEqual(["answer"]);
 	expect(f.requests).toHaveLength(1);
+});
+
+test("a group-room reply mentions the askers the gateway attributed to it", async () => {
+	const f = await fixture();
+	await f.delivery.onChatMessage(message({ text: "answer", askerIds: ["bu2_a", "bu2_b"] }));
+	expect(f.posted).toEqual([
+		{
+			path: "callback",
+			bubbles: ["{{#mentions.asker1}} {{#mentions.asker2}} answer"],
+			mentions: { asker1: "bu2_a", asker2: "bu2_b" },
+		},
+	]);
+	expect(f.requests).toEqual([{ verb: "delivery.confirm", params: { deliveryId: "d1" } }]);
+	// A reply the gateway did not attribute (a POST from another room, a notice) is unmentioned.
+	await f.delivery.onChatMessage(message({ deliveryId: "d2", text: "later" }));
+	expect(f.posted[1]).toEqual({ path: "send_message", bubbles: ["later"], route });
+});
+
+test("a turn's held speech mentions the union of its parts' askers once", async () => {
+	const f = await fixture({ running: true });
+	await f.delivery.onChatMessage(message({ deliveryId: "i1", text: "working", final: false, askerIds: ["bu2_a"] }));
+	expect(f.posted).toEqual([]);
+	await f.delivery.onChatMessage(message({ text: "done", askerIds: ["bu2_a", "bu2_b"] }));
+	expect(f.posted).toEqual([
+		{
+			path: "callback",
+			bubbles: ["{{#mentions.asker1}} {{#mentions.asker2}} working\n\ndone"],
+			mentions: { asker1: "bu2_a", asker2: "bu2_b" },
+		},
+	]);
+});
+
+test("a tokenless group reply still mentions; DM, channel chat and empty text never do", async () => {
+	const late = await fixture({ token: false });
+	await late.delivery.onChatMessage(message({ askerIds: ["bu2_a"] }));
+	expect(late.posted).toEqual([
+		{ path: "send_message", bubbles: ["{{#mentions.asker1}} answer"], route, mentions: { asker1: "bu2_a" } },
+	]);
+
+	const dmOrigin: OriginRef = { platform: "kakao", kind: "dm", conversationId: "bg2_dm", peerId: "bu2_a" };
+	const dm = await fixture({ origin: dmOrigin });
+	await dm.delivery.onChatMessage(message({ origin: dmOrigin, askerIds: ["bu2_a"] }));
+	expect(dm.posted).toEqual([{ path: "callback", bubbles: ["answer"] }]);
+
+	const empty = await fixture();
+	await empty.delivery.onChatMessage(message({ text: "", askerIds: ["bu2_a"] }));
+	expect(empty.posted).toEqual([]);
+	expect(empty.requests).toEqual([{ verb: "delivery.confirm", params: { deliveryId: "d1" } }]);
+});
+
+test("at most 15 askers are mentioned, keeping the latest", async () => {
+	const f = await fixture();
+	const askerIds = Array.from({ length: 17 }, (_, index) => `bu2_${index}`);
+	await f.delivery.onChatMessage(message({ askerIds }));
+	const mentions = f.posted[0]?.mentions ?? {};
+	expect(Object.keys(mentions)).toHaveLength(15);
+	expect(mentions.asker1).toBe("bu2_2");
+	expect(mentions.asker15).toBe("bu2_16");
+});
+
+test("the mention prefix takes first-bubble room without becoming its own bubble", async () => {
+	const f = await fixture();
+	await f.delivery.onChatMessage(message({ text: "x".repeat(2001), askerIds: ["bu2_a"] }));
+	const prefix = "{{#mentions.asker1}} ";
+	expect(f.posted).toHaveLength(1);
+	const bubbles = f.posted[0]?.bubbles ?? [];
+	expect(bubbles.map((bubble) => bubble.length)).toEqual([1000, 1000, prefix.length + 1]);
+	expect(bubbles[0]?.startsWith(`${prefix}x`)).toBe(true);
+	expect(bubbles.join("")).toBe(`${prefix}${"x".repeat(2001)}`);
+});
+
+test("only the first request of a long reply carries the mention", async () => {
+	const f = await fixture();
+	const long = Array.from({ length: 4 }, (_, index) => String(index).repeat(900)).join("\n");
+	await f.delivery.onChatMessage(message({ text: long, askerIds: ["bu2_a"] }));
+	expect(f.posted).toHaveLength(2);
+	expect(f.posted[0]?.mentions).toEqual({ asker1: "bu2_a" });
+	expect(f.posted[0]?.bubbles[0]?.startsWith("{{#mentions.asker1}} 0")).toBe(true);
+	expect(f.posted[1]).toEqual({ path: "send_message", bubbles: ["3".repeat(900)], route });
+});
+
+test("a refused mentioned callback is resent plain through send_message, never on the spent token", async () => {
+	const f = await fixture();
+	let callbacks = 0;
+	f.callbackAction(async () => {
+		callbacks++;
+		throw new KakaoApiError(400, "Kakao callback HTTP 400: invalid mention");
+	});
+	await f.delivery.onChatMessage(message({ text: "answer", askerIds: ["bu2_gone"] }));
+	expect(callbacks).toBe(1);
+	expect(f.posted).toEqual([
+		{ path: "callback", bubbles: ["{{#mentions.asker1}} answer"], mentions: { asker1: "bu2_gone" } },
+		{ path: "send_message", bubbles: ["answer"], route },
+	]);
+	expect(f.requests).toEqual([{ verb: "delivery.confirm", params: { deliveryId: "d1" } }]);
+	expect(f.logs.some((line) => line.includes("result=mention_refused"))).toBe(true);
+});
+
+test("a refusal without mentions is not resent", async () => {
+	const f = await fixture();
+	f.callbackAction(async () => {
+		throw new KakaoApiError(400, "Kakao callback HTTP 400: refused");
+	});
+	await f.delivery.onChatMessage(message());
+	expect(f.posted).toHaveLength(1);
+	expect(f.requests).toEqual([
+		{
+			verb: "delivery.fail",
+			params: { deliveryId: "d1", reason: "Kakao callback HTTP 400: refused", ambiguous: false },
+		},
+	]);
+});
+
+test("a transport failure with a mention is not resent", async () => {
+	const f = await fixture();
+	f.callbackAction(async () => {
+		throw new Error("Kakao callback request timed out");
+	});
+	await f.delivery.onChatMessage(message({ askerIds: ["bu2_a"] }));
+	expect(f.posted).toHaveLength(1);
+	expect(f.requests[0]?.verb).toBe("delivery.fail");
+	expect(f.requests[0]?.params.ambiguous).toBe(true);
+});
+
+test("model text cannot inject Kakao mention templates", async () => {
+	const f = await fixture();
+	await f.delivery.onChatMessage(
+		message({ text: "hi {{#mentions.asker1}} and {{#mentions.evil}}", askerIds: ["bu2_a"] }),
+	);
+	expect(f.posted[0]?.bubbles).toEqual(["{{#mentions.asker1}} hi { {#mentions.asker1}} and { {#mentions.evil}}"]);
 });

@@ -1,9 +1,12 @@
-/** SkillResponse simpleText is limited to 1,000 characters per bubble. */
-export function toBubbles(text: string): string[] {
+/**
+ * SkillResponse simpleText is limited to 1,000 characters per bubble. `prefix` (mention
+ * placeholders) opens the first bubble and takes its room there; it is never a split point.
+ */
+export function toBubbles(text: string, prefix = ""): string[] {
 	const result: string[] = [];
 	let rest = text;
-	while (rest.length > 1_000) {
-		let end = 1_000;
+	while (rest.length > (result.length === 0 ? 1_000 - prefix.length : 1_000)) {
+		let end = result.length === 0 ? 1_000 - prefix.length : 1_000;
 		// Do not cut a UTF-16 surrogate pair at the hard boundary.
 		if (/[\uD800-\uDBFF]/.test(rest[end - 1] ?? "")) end--;
 		const window = rest.slice(0, end);
@@ -15,6 +18,7 @@ export function toBubbles(text: string): string[] {
 		rest = rest.slice(end);
 	}
 	if (rest) result.push(rest);
+	if (result.length > 0 && prefix) result[0] = `${prefix}${result[0]}`;
 	return result;
 }
 

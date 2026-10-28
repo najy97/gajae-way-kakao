@@ -35,14 +35,22 @@ async function fixture() {
 	homes.push(home);
 	let state = await KakaoAdapterState.load(home);
 	const clock = new FakeClock();
-	const posts: { path: string; texts: string[]; target?: string }[] = [];
+	const posts: { path: string; texts: string[]; target?: string; extra?: unknown }[] = [];
 	let response: { totalCount: number; sendCount: number; errorCount: number } | undefined;
+	const refusals: Response[] = [];
 	const api = new KakaoBotApi("bot-secret", async (url, init) => {
 		const body = JSON.parse(String(init?.body));
 		const texts = body.skillResponse.template.outputs.map(
 			(bubble: { simpleText: { text: string } }) => bubble.simpleText.text,
 		);
-		posts.push({ path: String(url).split("/").at(-1)!, texts, target: body.botGroupKey ?? body.botUserKey });
+		posts.push({
+			path: String(url).split("/").at(-1)!,
+			texts,
+			target: body.botGroupKey ?? body.botUserKey,
+			...(body.skillResponse.extra ? { extra: body.skillResponse.extra } : {}),
+		});
+		const refusal = refusals.shift();
+		if (refusal) return refusal;
 		return Response.json(response ?? { totalCount: texts.length, sendCount: texts.length, errorCount: 0 });
 	});
 	const ledger = new Map<string, { terminal?: string; settlements: number; ambiguous?: boolean }>();
@@ -109,6 +117,9 @@ async function fixture() {
 		respond: (value: typeof response) => {
 			response = value;
 		},
+		refuseNext: (value: Response) => {
+			refusals.push(value);
+		},
 		recreate: async () => {
 			delivery.stop();
 			state = await KakaoAdapterState.load(home);
@@ -128,9 +139,52 @@ async function finalProgress(delivery: KakaoDelivery) {
 test("ledger integration: callback success settles every delivery exactly once", async () => {
 	const f = await fixture();
 	await f.emit("first", { final: false });
-	await f.emit("second");
+	await f.emit("second", { askerIds: ["user"] });
 	f.assertSettled(["first", "second"]);
-	expect(f.posts).toEqual([{ path: "callback", texts: ["first\n\nsecond"], target: undefined }]);
+	// The gateway attributed the turn to its asker, so the group-room callback mentions them.
+	expect(f.posts).toEqual([
+		{
+			path: "callback",
+			texts: ["{{#mentions.asker1}} first\n\nsecond"],
+			target: undefined,
+			extra: { mentions: { asker1: { type: "botUserKey", id: "user" } } },
+		},
+	]);
+});
+
+test("ledger integration: a refused mention reaches the room plain via send_message, not the spent token", async () => {
+	const f = await fixture();
+	f.refuseNext(Response.json({ code: -401, msg: "invalid mention" }, { status: 400 }));
+	await f.emit("answer", { askerIds: ["gone"] });
+	f.assertSettled(["answer"]);
+	expect(f.posts).toEqual([
+		{
+			path: "callback",
+			texts: ["{{#mentions.asker1}} answer"],
+			target: undefined,
+			extra: { mentions: { asker1: { type: "botUserKey", id: "gone" } } },
+		},
+		{ path: "send_message", texts: ["answer"], target: "group" },
+	]);
+});
+
+test("ledger integration: a refused mention whose plain resend is also refused fails definitively", async () => {
+	const f = await fixture();
+	f.refuseNext(Response.json({ code: -401, msg: "invalid mention" }, { status: 400 }));
+	f.refuseNext(Response.json({ code: -403, msg: "quota" }, { status: 403 }));
+	await f.emit("answer", { askerIds: ["gone"] });
+	f.assertSettled(["answer"], "delivery.fail");
+	expect(f.ledger.get("answer")?.ambiguous).toBe(false);
+	expect(f.posts).toHaveLength(2);
+});
+
+test("ledger integration: a 4xx that reports positive sends is never resent", async () => {
+	const f = await fixture();
+	f.refuseNext(Response.json({ totalCount: 1, sendCount: 1, errorCount: 0, code: -1 }, { status: 400 }));
+	await f.emit("answer", { askerIds: ["user"] });
+	f.assertSettled(["answer"], "delivery.fail");
+	expect(f.ledger.get("answer")?.ambiguous).toBe(true);
+	expect(f.posts).toHaveLength(1);
 });
 
 test("ledger integration: first settlement request failure retries without losing any delivery or reposting", async () => {

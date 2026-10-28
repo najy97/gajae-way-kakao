@@ -290,6 +290,13 @@ export interface ChatMessagePayload {
 	readonly deliveryId?: string;
 	/** Platform message id this message replies to (reply-threading), when the persona chose one. */
 	readonly replyToMessageId?: string;
+	/**
+	 * Platform author ids (`EngagementContext.authorId`) of the inbound messages the
+	 * turn had taken in when this reply was produced: its trigger and every steered
+	 * message, distinct, in arrival order. Lets an adapter address the people a
+	 * group-room reply answers. Absent when unknown; never guessed.
+	 */
+	readonly askerIds?: readonly string[];
 	/** True when re-emitted from the ledger after a restart. */
 	readonly redelivered?: boolean;
 	/**
