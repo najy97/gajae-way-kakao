@@ -11,6 +11,8 @@ import { readPinnedGjcVersion } from "../src/orchestrator/broker";
 import { DatabaseStartupError, Store } from "../src/store";
 import {
 	resolveLaneReportOrigin,
+	validateWorkParent,
+	validateWorkRoot,
 	type WorkAttemptAdmission,
 	type WorkAttemptPatch,
 	type WorkAttemptRuntime,
@@ -26,6 +28,21 @@ const START = "2026-09-08T00:00:00.000Z";
 const END = "2026-09-08T00:00:10.000Z";
 const SESSION = "ad2f2494-2584-4d13-b7b6-c6ac24a1087f";
 const PARENT_SESSION = "bcb7f8a3-30e5-4d76-9e7e-32d2e2f51f9a";
+
+test("work parent and nested root validators accept Kakao but reject non-chat and mismatched roots", () => {
+	const origin: OriginRef = { platform: "kakao", kind: "channel", conversationId: "room" };
+	const root = { origin, originKey: originKey(origin) };
+	expect(() => validateWorkRoot(root)).not.toThrow();
+	expect(() => validateWorkParent({ kind: "persona", ...root }, "start")).not.toThrow();
+	expect(() => validateWorkParent({ kind: "lane", name: "parent", root }, "start")).not.toThrow();
+	expect(() =>
+		validateWorkParent({ kind: "lane", name: "parent", root: { ...root, originKey: "kakao/channel/other" } }, "start"),
+	).toThrow();
+	const work: OriginRef = { platform: "work", kind: "task", conversationId: "parent" };
+	expect(() => validateWorkRoot({ origin: work, originKey: originKey(work) })).toThrow();
+	expect(() => validateWorkParent({ kind: "persona", origin: work, originKey: originKey(work) }, "start")).toThrow();
+});
+
 const directories: string[] = [];
 const handles: Array<{ close(): void }> = [];
 afterEach(async () => {

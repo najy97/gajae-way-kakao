@@ -546,7 +546,9 @@ test("RT-REACT-04 chat.react rejects malformed and unroutable origins", async ()
 		const failure = errorFrame(client.frames, id);
 		expect(failure?.error.code).toBe("invalid_params");
 	}
-	expect(errorFrame(client.frames, "o9").error.message).toContain("requires a discord, telegram or slack origin");
+	expect(errorFrame(client.frames, "o9").error.message).toContain(
+		"requires a discord, telegram, slack or kakao origin",
+	);
 	expect(database.outbox.rows()).toHaveLength(0);
 	// RT-REACT-04b (was a finding, now fixed): a `monitor` origin is a structurally
 	// valid OriginRef, but no chat adapter subscribes to it, so accepting one would
@@ -554,7 +556,9 @@ test("RT-REACT-04 chat.react rejects malformed and unroutable origins", async ()
 	// same way chat.send rejects non-chat platforms.
 	await request(client, "o10", "chat.react", { origin: MONITOR_ORIGIN, targetMessageId: "m1", emoji: "👍" });
 	await settle();
-	expect(errorFrame(client.frames, "o10")?.error.message).toContain("requires a discord, telegram or slack origin");
+	expect(errorFrame(client.frames, "o10")?.error.message).toContain(
+		"requires a discord, telegram, slack or kakao origin",
+	);
 	expect(database.outbox.rows()).toHaveLength(0);
 });
 

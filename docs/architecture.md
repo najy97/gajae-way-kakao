@@ -11,6 +11,7 @@ The Bun workspace is divided into small packages:
 | `@gajae-gateway/gateway` | Daemon: configuration, SQLite state, sessions, delivery, memory, monitors, and the `gjc` boundary. |
 | `@gajae-gateway/adapter-discord` | Discord ingress and outbound delivery, including typing hints and the reaction-gradient presence. |
 | `@gajae-gateway/adapter-telegram` | Telegram ingress and outbound delivery. |
+| `@gajae-gateway/adapter-kakao` | Kakao Talk bot ingress over the bot gateway websocket, and callback/send_message delivery. |
 | `@gajae-gateway/adapter-slack` | Slack ingress over Socket Mode, mrkdwn delivery, reactions, working-status presence, and missed-message recovery. |
 | `@gajae-gateway/cli` | Owner commands over the gateway socket. |
 
@@ -26,6 +27,7 @@ The Bun workspace is divided into small packages:
 | Discord adapter | Discord adapter process, holding `adapter-discord` | Owns its adapter process for this home; it connects to the gateway as a client. |
 | Slack adapter | Slack adapter process, holding `adapter-slack` | Owns its adapter process for this home; it connects to the gateway as a client. |
 | Telegram adapter | Telegram adapter process, holding `adapter-telegram` | Owns its adapter process for this home; it connects to the gateway as a client. |
+| Kakao adapter | Kakao adapter process, holding `adapter-kakao` | Owns its adapter process for this home; it connects to the gateway as a client. |
 | Update and restart supervisor | CLI update/restart operation, holding `update` | Serializes binary installation and the ordered service restart; adapters and admin are clients, not database owners. |
 
 Gajaeway provisions the private broker directory from an explicit file allowlist. The source `~/.gjc/agent` is read for that snapshot and drift checks; gajaeway does not write to that source. GJC itself is only invoked against the private broker directory.
@@ -90,6 +92,7 @@ The exported `LeaseName` union and `LEASE_NAMES` in `@gajae-gateway/home` define
 | `adapter-discord` | Discord adapter process. |
 | `adapter-slack` | Slack adapter process. |
 | `adapter-telegram` | Telegram adapter process. |
+| `adapter-kakao` | Kakao adapter process. |
 
 
 ## Wire protocol and negotiation

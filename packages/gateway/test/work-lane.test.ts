@@ -898,6 +898,51 @@ test("notification target is immutable across owner reload; no-target remains no
 	expect(f.db.work.workAttemptGet(second.opRef)?.decision).toBe("no_target");
 });
 
+for (const owner of [undefined, { platform: "slack", kind: "channel", conversationId: "slack-owner" } as OriginRef]) {
+	test(`Kakao work caller completion returns to its origin with ${owner ? "Slack owner" : "no owner"}`, async () => {
+		const kakao: OriginRef = { platform: "kakao", kind: "channel", conversationId: "kakao-caller" };
+		const f = await fixture({ ownerTarget: () => owner });
+		const callerSessionId = crypto.randomUUID();
+		f.db.transaction((tx) => f.db.bindings.bind(tx, originKey(kakao), callerSessionId));
+		const result = await f.manager.start({ name: "a", text: "work", cwd: f.directory, callerSessionId });
+		if (!result.started) throw new Error("unexpected hold");
+		expect(f.db.work.workAttemptGet(result.opRef)?.parent).toMatchObject({ kind: "persona", origin: kakao });
+		f.port.complete(result.opRef, "Kakao caller result");
+		await until(() => f.db.work.workAttemptGet(result.opRef)?.settledAt != null);
+		const runtime = f.db.work.workAttemptGet(result.opRef)!;
+		expect(runtime.decision).toBe("reported");
+		expect(f.db.inbox.pendingOldest(originKey(kakao))?.message_id).toBe(runtime.reportId);
+		expect(f.db.inbox.pendingOldest(originKey(kakao))?.origin_ref_json).toBe(JSON.stringify(kakao));
+		if (owner) expect(f.db.inbox.pendingCount(originKey(owner))).toBe(0);
+		expect(f.notices).toHaveLength(0);
+		expect(f.db.outbox.rows()).toHaveLength(0);
+	});
+}
+
+test("Kakao owner fallback and nested lane root persist through work.start and completion", async () => {
+	const kakao: OriginRef = { platform: "kakao", kind: "dm", conversationId: "kakao-room", peerId: "user" };
+	const f = await fixture({ ownerTarget: () => kakao, allowNested: () => true });
+	const parent = await started(f, "parent");
+	const child = await f.manager.start({
+		name: "child",
+		text: "nested",
+		cwd: f.directory,
+		callerSessionId: parent.sessionId,
+	});
+	if (!child.started) throw new Error("unexpected hold");
+	expect(f.db.work.workAttemptGet(parent.opRef)?.parent).toMatchObject({ kind: "persona", origin: kakao });
+	expect(f.db.work.workAttemptGet(child.opRef)?.parent).toMatchObject({
+		kind: "lane",
+		name: "parent",
+		root: { origin: kakao, originKey: originKey(kakao) },
+	});
+	f.port.complete(child.opRef, "child result");
+	await until(() => f.db.work.workAttemptGet(child.opRef)?.settledAt != null);
+	f.port.complete(parent.opRef, "parent result");
+	await until(() => f.notices.length === 1);
+	expect(f.notices[0]?.origin).toEqual(kakao);
+});
+
 test("proven original silence suppresses before prefix and UTF8 clipping, and survives restart", async () => {
 	const f = await fixture();
 	const result = await started(f, "a", origin);

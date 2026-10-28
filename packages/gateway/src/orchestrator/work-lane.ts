@@ -4,6 +4,7 @@ import { existsSync, lstatSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import {
 	type ChatMessagePayload,
+	isChatPlatform,
 	isSilentOutput,
 	type OriginRef,
 	originKey,
@@ -711,7 +712,7 @@ export class WorkLaneManager {
 						origin = admitted;
 					}
 				}
-				if (["discord", "slack", "telegram", "loopback"].includes(origin.platform)) {
+				if (isChatPlatform(origin.platform) || origin.platform === "loopback") {
 					callerPersona = origin;
 					triggerMessageId = activeTurn?.triggerMessageId;
 				}
@@ -754,7 +755,7 @@ export class WorkLaneManager {
 		if (owner) {
 			try {
 				validateOriginRef(owner);
-				if (["discord", "slack", "telegram", "loopback"].includes(owner.platform)) {
+				if (isChatPlatform(owner.platform) || owner.platform === "loopback") {
 					// Capture trigger message ID from the ownerTarget's origin for threading
 					let ownerTriggerMessageId: string | undefined;
 					const ownerOriginKey = originKey(owner);

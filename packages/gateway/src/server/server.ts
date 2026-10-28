@@ -41,6 +41,7 @@ import {
 	type ReactionRef,
 	type RequestFrame,
 	reactionAllowlistDescription,
+	reactionAllowlistFor,
 	resolveReactionEmoji,
 	validateOriginRef,
 	WORK_JOBS_DEFAULT_LIMIT,
@@ -2239,10 +2240,10 @@ async function handleRequest(
 					"invalid_params",
 					`emoji ${JSON.stringify(params.emoji)} is outside the reaction allowlist or custom emoji rules: ${reactionAllowlistDescription(origin.platform)}`,
 				);
-			// Custom emoji are allowed on Discord and Slack; Telegram rejects them as unsupported.
+			// Custom emoji are allowed only when the platform can deliver them.
 			const isCustom = resolved.isCustom === true;
 			if (isCustom) {
-				if (origin.platform === "telegram")
+				if (!platformSupportsReaction(origin.platform, resolved.name))
 					throw new ProtocolError(
 						"invalid_params",
 						`${origin.platform} does not support custom emoji; it accepts: ${reactionAllowlistDescription(origin.platform)}`,
@@ -2324,6 +2325,8 @@ async function handleRequest(
 			}
 			if (!isChatPlatform(origin.platform))
 				throw new ProtocolError("invalid_params", `engagement.reaction requires a ${describeChatPlatforms()} origin`);
+			if (reactionAllowlistFor(origin.platform).length === 0)
+				throw new ProtocolError("invalid_params", `engagement.reaction is not supported for ${origin.platform}`);
 			if (typeof params?.targetMessageId !== "string" || !isPlatformMessageId(params.targetMessageId.trim()))
 				throw new ProtocolError(
 					"invalid_params",
@@ -4687,9 +4690,13 @@ export function currentConversationNotice(origin: OriginRef): string {
 		// adapters) but never named in the session context, so the persona answered
 		// threaded messages at the conversation root and looked like it ignored the
 		// thread (live, slack DM, 2026-09-17).
-		...(isChatPlatform(origin.platform)
+		...(isChatPlatform(origin.platform) && origin.platform !== "kakao"
 			? [
 					"Threaded replies: start a reply part with [REPLY:<message id>] to answer that specific message; the token is routing metadata and never appears in the delivered text. Message ids are in each incoming message header (msg:<id>). When the message you are answering is itself inside a thread, target the thread's parent message id so your answer lands in that thread instead of the conversation root. To say something in another channel, use a post block (below), not a reply token.",
+				]
+			: []),
+		...(isChatPlatform(origin.platform)
+			? [
 					`Posting to another room: wrap what that channel should read as [POST:<origin key>] the text to post [POSTDONE] (for example [POST:${origin.platform}/channel/<channel id>] ... [POSTDONE]); [SEND:<target>] ... [SENDDONE] means the same. Blocks may sit anywhere in a reply and one reply may carry several; text outside them is delivered here as usual, and the tokens never appear in the delivered text. The target may also be written as a configured handoff alias, ${origin.platform}:<channel id>, or <#channel id>. Only ${origin.platform} channels configured in the gateway are allowed - never a DM or a thread, never another platform - and a refused target is posted here with the token removed. A post is sent once, when your answer is final, and a reply-threading token inside it is ignored. In Discord and Slack text, a channel link is <#channel id>.`,
 				]
 			: []),
@@ -4702,7 +4709,7 @@ export function currentConversationNotice(origin: OriginRef): string {
 			: []),
 		// The third reply mode: acknowledge without speaking. Kept next to the silence
 		// guidance because the persona chooses between exactly these three shapes.
-		...(isChatPlatform(origin.platform)
+		...(isChatPlatform(origin.platform) && reactionAllowlistFor(origin.platform).length > 0
 			? [
 					`Reaction replies: start your reply with [REACT:<emoji>] to react to the message that triggered this turn, or [REACT:<emoji>@<message id>] to react to a specific message. Remove a reaction you added earlier with [UNREACT:<emoji>@<message id>]; removal frees up your reaction budget and allows you to add a different emoji to the same message (e.g. change 🔥 to ❤). With nothing after the tokens you acknowledge with a reaction and say nothing; text after the tokens is sent as well. Emoji ${origin.platform} can actually deliver: ${reactionAllowlistDescription(origin.platform)}. Custom emoji names (Slack-valid: lowercase, digits, underscores, hyphens, 2-80 chars) are also accepted on Slack and Discord and will be validated server-side. At most ${REACTIONS_PER_TURN_CAP} reactions per turn and ${REACTIONS_PER_MESSAGE_CAP} per message.`,
 				]
@@ -4719,7 +4726,7 @@ export function currentConversationNotice(origin: OriginRef): string {
 		// spent waiting. Waits are backgrounded or handed to a lane that reports to its parent.
 		"## Staying responsive while you work",
 		'Answer in words first. Never block a conversation turn on a foreground wait: no `gh run watch`, `gh pr checks --watch`, `sleep N; <poll>` loops, or repeated `gajaeway work jobs` / `work status` polling. Run a long wait as a background job (bash with async), or delegate to a lane with `gajaeway work start <name> --cwd "$PWD" "<task>"` from the target checkout, or use `--repo <path-or-url>` to create an isolated repository worktree. Its result returns here as an internal report, not a chat post. Say what you started and end the turn.',
-		`When a new message arrives while you are working, it interrupts you: any foreground command is moved to the background so you can answer. Always answer it in words, right away; a reaction alone is never the whole answer to a message from the owner.${isChatPlatform(origin.platform) ? " The gateway already marks the message 👀 when it lands, so do not spend your reply on another reaction." : ""}`,
+		`When a new message arrives while you are working, it interrupts you: any foreground command is moved to the background so you can answer. Always answer it in words, right away; a reaction alone is never the whole answer to a message from the owner.${isChatPlatform(origin.platform) && reactionAllowlistFor(origin.platform).length > 0 ? " The gateway already marks the message 👀 when it lands, so do not spend your reply on another reaction." : ""}`,
 	].join("\n");
 }
 /** A Slack platform message id is `channel:ts`; synthetic trigger ids (`slash-…`, `edit:…`) never thread. */

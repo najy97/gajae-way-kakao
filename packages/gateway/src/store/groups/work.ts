@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
 	type ChatMessagePayload,
+	isChatPlatform,
 	isSilentOutput,
 	type OriginRef,
 	originKey,
@@ -295,7 +296,7 @@ export function validateWorkRoot(root: WorkReportRoot): void {
 	workAssert(root && typeof root === "object");
 	validateOriginRef(root.origin);
 	workAssert(originKey(root.origin) === root.originKey);
-	workAssert(["discord", "slack", "telegram", "loopback"].includes(root.origin.platform));
+	workAssert(isChatPlatform(root.origin.platform) || root.origin.platform === "loopback");
 }
 
 export function validateWorkParent(parent: WorkParent, mode: WorkAttemptMode): void {
@@ -303,7 +304,7 @@ export function validateWorkParent(parent: WorkParent, mode: WorkAttemptMode): v
 	if (parent.kind === "persona") {
 		validateOriginRef(parent.origin);
 		workAssert(originKey(parent.origin) === parent.originKey);
-		workAssert(["discord", "slack", "telegram", "loopback"].includes(parent.origin.platform));
+		workAssert(isChatPlatform(parent.origin.platform) || parent.origin.platform === "loopback");
 		return;
 	}
 	workAssert(parent.kind === "lane" && /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(parent.name));

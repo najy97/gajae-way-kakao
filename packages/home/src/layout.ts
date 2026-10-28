@@ -8,7 +8,8 @@ export type LeaseName =
 	| "memory"
 	| "adapter-discord"
 	| "adapter-slack"
-	| "adapter-telegram";
+	| "adapter-telegram"
+	| "adapter-kakao";
 
 export const LEASE_NAMES: readonly LeaseName[] = [
 	"gateway",
@@ -18,6 +19,7 @@ export const LEASE_NAMES: readonly LeaseName[] = [
 	"adapter-discord",
 	"adapter-slack",
 	"adapter-telegram",
+	"adapter-kakao",
 ];
 
 export interface HomeLayout {

@@ -7,22 +7,22 @@
  * One conversational origin == one strictly isolated session (spec fact 9).
  */
 
-export const ORIGIN_PLATFORMS = ["loopback", "discord", "telegram", "slack", "monitor", "work"] as const;
+export const ORIGIN_PLATFORMS = ["loopback", "discord", "telegram", "slack", "kakao", "monitor", "work"] as const;
 export type OriginPlatform = (typeof ORIGIN_PLATFORMS)[number];
 
 /**
  * The platforms with real messages behind them: the ones an adapter can deliver
- * to, react on, and report reactions from. `loopback` is the owner REPL and
+ * to. Reaction capability is checked separately. `loopback` is the owner REPL and
  * `monitor` is event-driven work; neither has a message a persona could react to.
  */
-export const CHAT_PLATFORMS = ["discord", "telegram", "slack"] as const;
+export const CHAT_PLATFORMS = ["discord", "telegram", "slack", "kakao"] as const;
 export type ChatPlatform = (typeof CHAT_PLATFORMS)[number];
 
 export function isChatPlatform(platform: OriginPlatform): platform is ChatPlatform {
 	return (CHAT_PLATFORMS as readonly string[]).includes(platform);
 }
 
-/** "a discord, telegram or slack origin": the wording every chat-only verb rejects with. */
+/** The platform wording every chat-only verb rejects with. */
 export function describeChatPlatforms(): string {
 	const [last, ...rest] = [...CHAT_PLATFORMS].reverse();
 	return `${rest.reverse().join(", ")} or ${last}`;

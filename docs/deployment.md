@@ -463,6 +463,20 @@ Presence is a reaction gradient on the message the persona is answering, not a p
 
 After every socket connect and gateway reconnect the adapter backfills missed messages from `conversations.history`, keyed by `channel:ts`, so the gateway's durable dedupe makes overlap with live traffic safe. Coverage is bounded on purpose: only channels listed in `adapter-slack.json` `channels`, the 100 most recently active DMs seen live within 30 days, and threads the persona replied in during the last 7 days are revisited; a channel with no watermark is backfilled 24 hours deep, and an oversized gap drains across passes in bounded slices. Channels the bot cannot read are quarantined after three consecutive failures and probed again on the next connect. A message the gateway refuses three times for its own content is dead-lettered into `adapters/slack/recovery-cursor.json` (with a per-channel digest) rather than pinning the channel; a gateway outage never discards anything.
 
+## Kakao adapter
+
+`gajaeway-kakao` uses the Kakao bot gateway WebSocket, with no public webhook URL. Remove any registered bot webhook and register the host's outbound IP for bot API calls. Create `$GAJAEWAY_HOME/adapter-kakao.json` (`GAJAEWAY_HOME` defaults to `~/.gajaeway`):
+
+```json
+{
+  "tokenFile": "secrets/kakao-token"
+}
+```
+
+Store the bot authentication token in that credential file with mode `0600`. Relative `tokenFile` paths resolve against the config directory. Optional `gatewaySocket` defaults to `$GAJAEWAY_HOME/gateway.sock`. With the gateway running, start `dist/gajaeway-kakao` or `bun run packages/adapter-kakao/src/main.ts` using the same `GAJAEWAY_HOME`.
+
+Replies use the one-time callback token when available. Kakao expires the token five minutes after receipt; the adapter uses it only while it is under 255 seconds old, which reserves the 15-second request timeout. While a turn is running in a room, its mid-turn text is held and sent together when the turn ends or 255 seconds after the token arrived, whichever is first. A non-final message for an idle room (a restart notice or a post from another room) is sent at once; one that lands in a room with a running turn cannot be told apart from the persona's own speech and waits with it. Later batches and replies without a usable callback use `send_message` (Kakao quota: 1,000 per day). Each request contains at most three text bubbles of at most 1,000 characters. Reply routes persist in `adapter-kakao-state.json`; callback tokens remain in memory only, so an adapter restart answers pending turns through `send_message`. Inbound messages the gateway has not yet accepted are retried in memory (at most 500, oldest dropped) and are lost if the adapter itself restarts. Kakao has no reaction, file-upload, or threaded-reply support.
+
 ## Reloading configuration without a restart
 
 A running gateway re-reads `config.json` on `SIGHUP` (`kill -HUP <pid>`) or on the `gateway.reloadConfig` verb; both run the same implementation, so the console and the signal behave identically.

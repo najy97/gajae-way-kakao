@@ -21,6 +21,15 @@
         "discord.js": "^14.25.1",
       },
     },
+    "packages/adapter-kakao": {
+      "name": "@gajae-gateway/adapter-kakao",
+      "version": "0.1.0",
+      "dependencies": {
+        "@gajae-gateway/home": "workspace:*",
+        "@gajae-gateway/protocol": "workspace:*",
+        "@gajae-gateway/sdk": "workspace:*",
+      },
+    },
     "packages/adapter-slack": {
       "name": "@gajae-gateway/adapter-slack",
       "version": "0.1.0",
@@ -139,6 +148,8 @@
     "@discordjs/ws": ["@discordjs/ws@1.2.3", "", { "dependencies": { "@discordjs/collection": "^2.1.0", "@discordjs/rest": "^2.5.1", "@discordjs/util": "^1.1.0", "@sapphire/async-queue": "^1.5.2", "@types/ws": "^8.5.10", "@vladfrangu/async_event_emitter": "^2.2.4", "discord-api-types": "^0.38.1", "tslib": "^2.6.2", "ws": "^8.17.0" } }, "sha512-wPlQDxEmlDg5IxhJPuxXr3Vy9AjYq5xCvFWGJyD7w7Np8ZGu+Mc+97LCoEc/+AYCo2IDpKioiH0/c/mj5ZR9Uw=="],
 
     "@gajae-gateway/adapter-discord": ["@gajae-gateway/adapter-discord@workspace:packages/adapter-discord"],
+
+    "@gajae-gateway/adapter-kakao": ["@gajae-gateway/adapter-kakao@workspace:packages/adapter-kakao"],
 
     "@gajae-gateway/adapter-slack": ["@gajae-gateway/adapter-slack@workspace:packages/adapter-slack"],
 

@@ -199,11 +199,11 @@ describe("origin normalization", () => {
 	});
 
 	test("chat platforms are exactly the ones an adapter can deliver to", () => {
-		expect(CHAT_PLATFORMS).toEqual(["discord", "telegram", "slack"]);
+		expect(CHAT_PLATFORMS).toEqual(["discord", "telegram", "slack", "kakao"]);
 		for (const platform of CHAT_PLATFORMS) expect(isChatPlatform(platform)).toBe(true);
 		expect(isChatPlatform("loopback")).toBe(false);
 		expect(isChatPlatform("monitor")).toBe(false);
-		expect(describeChatPlatforms()).toBe("discord, telegram or slack");
+		expect(describeChatPlatforms()).toBe("discord, telegram, slack or kakao");
 	});
 
 	test("loopback origin is valid and stable", () => {

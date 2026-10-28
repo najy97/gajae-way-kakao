@@ -127,6 +127,7 @@ export function resolveReactionEmoji(
 const TELEGRAM_INCAPABLE = new Set(["check", "cross", "lobster"]);
 
 export function platformSupportsReaction(platform: OriginPlatform, emojiName: string): boolean {
+	if (platform === "kakao") return false;
 	return platform === "telegram" ? BY_NAME.has(emojiName) && !TELEGRAM_INCAPABLE.has(emojiName) : true;
 }
 
@@ -146,9 +147,11 @@ export function reactionAllowlistFor(platform: OriginPlatform): readonly Reactio
  * rather than a silent fallback to the full list.
  */
 export function reactionAllowlistDescription(platform: OriginPlatform): string {
-	return reactionAllowlistFor(platform)
-		.map((entry) => `${entry.unicode} (${entry.name})`)
-		.join(", ");
+	return (
+		reactionAllowlistFor(platform)
+			.map((entry) => `${entry.unicode} (${entry.name})`)
+			.join(", ") || "none (reactions are not supported)"
+	);
 }
 
 /**

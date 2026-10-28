@@ -13,6 +13,13 @@ import {
 } from "../src/index";
 
 describe("reaction allowlist", () => {
+	test("Kakao has no reaction capability, including custom emoji", () => {
+		for (const name of [...REACTION_ALLOWLIST.map((entry) => entry.name), "custom_emoji"])
+			expect(platformSupportsReaction("kakao", name)).toBe(false);
+		expect(reactionAllowlistFor("kakao")).toEqual([]);
+		expect(reactionAllowlistDescription("kakao")).toBe("none (reactions are not supported)");
+	});
+
 	test("every accepted spelling of an allowlisted emoji resolves to one canonical entry", () => {
 		expect(resolveReactionEmoji("👍")).toEqual({ name: "thumbsup", unicode: "👍" });
 		expect(resolveReactionEmoji("thumbsup")).toEqual({ name: "thumbsup", unicode: "👍" });

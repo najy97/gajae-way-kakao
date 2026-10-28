@@ -196,6 +196,80 @@ test("the model's own [REACT:👀] on a steered message the gateway already ackn
 	expect(textEvents(client.frames).map((frame) => frame.payload.text)).toEqual(["on it"]);
 });
 
+test("Kakao chat.react rejects custom and allowlisted emoji without enqueuing a delivery", async () => {
+	const { client, database, turns } = await gateway("unused");
+	const origin = { platform: "kakao", kind: "channel", conversationId: "bg2_group" } as const;
+	for (const [id, emoji] of [
+		["kakao-custom", "custom_emoji"],
+		["kakao-eyes", "👀"],
+	] as const)
+		client.send({
+			v: "0.1",
+			type: "request",
+			id,
+			verb: "chat.react",
+			params: { origin, targetMessageId: "m1", emoji },
+		});
+	await settle();
+	for (const id of ["kakao-custom", "kakao-eyes"]) {
+		const error = client.frames.find((frame) => frame.type === "error" && frame.id === id);
+		expect(error?.error.code).toBe("invalid_params");
+		expect(error?.error.message).toContain("kakao");
+	}
+	expect(database.outbox.rows()).toHaveLength(0);
+	expect(reactionEvents(client.frames)).toHaveLength(0);
+	expect(turns).toEqual([]);
+});
+
+test("Kakao inbound reactions are refused without recording context or opening a turn", async () => {
+	const { client, database, turns } = await gateway("unused");
+	client.send({
+		v: "0.1",
+		type: "request",
+		id: "kakao-inbound",
+		verb: "engagement.reaction",
+		params: {
+			origin: { platform: "kakao", kind: "channel", conversationId: "bg2_group" },
+			targetMessageId: "m1",
+			emoji: "👍",
+			action: "add",
+			engagement: { authorId: "bu2_user" },
+		},
+	});
+	await settle();
+	const error = client.frames.find((frame) => frame.type === "error" && frame.id === "kakao-inbound");
+	expect(error?.error.code).toBe("invalid_params");
+	expect(error?.error.message).toBe("engagement.reaction is not supported for kakao");
+	expect(database.inbox.contextUnread("kakao/channel/bg2_group")).toHaveLength(0);
+	expect(database.inbox.pendingCount("kakao/channel/bg2_group")).toBe(0);
+	expect(database.outbox.rows()).toHaveLength(0);
+	expect(turns).toEqual([]);
+});
+
+test("Telegram inbound reactions outside the outbound allowlist remain valid human metadata", async () => {
+	const { client, database, turns } = await gateway("unused");
+	client.send({
+		v: "0.1",
+		type: "request",
+		id: "telegram-inbound",
+		verb: "engagement.reaction",
+		params: {
+			origin: { platform: "telegram", kind: "channel", conversationId: "chan-1" },
+			targetMessageId: "m1",
+			emoji: "✅",
+			action: "add",
+			engagement: { authorId: "human-1" },
+		},
+	});
+	await settle();
+	expect(client.frames.find((frame) => frame.type === "response" && frame.id === "telegram-inbound")?.result).toEqual({
+		recorded: true,
+		engaged: false,
+	});
+	expect(database.inbox.contextUnread("telegram/channel/chan-1")[0]?.body).toBe("[reaction] reacted ✅ to message m1");
+	expect(turns).toEqual([]);
+});
+
 test("an inbound reaction is metadata: it never creates a turn", async () => {
 	const { client, database, turns } = await gateway("should never be produced");
 	client.send({
@@ -562,7 +636,7 @@ test("chat.react is not available on loopback, which has no messages to react to
 	});
 	await settle();
 	expect(client.frames.find((frame) => frame.type === "error" && frame.id === "k1").error.message).toContain(
-		"requires a discord, telegram or slack origin",
+		"requires a discord, telegram, slack or kakao origin",
 	);
 });
 
@@ -594,7 +668,7 @@ test("the reaction verbs refuse an origin no chat adapter can settle", async () 
 	await settle();
 	for (const id of ["k1", "k2"])
 		expect(client.frames.find((frame) => frame.type === "error" && frame.id === id).error.message).toContain(
-			"requires a discord, telegram or slack origin",
+			"requires a discord, telegram, slack or kakao origin",
 		);
 	expect(database.outbox.rows()).toHaveLength(0);
 });
