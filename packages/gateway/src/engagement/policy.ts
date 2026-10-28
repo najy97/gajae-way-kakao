@@ -363,6 +363,12 @@ export function resolveBotAudienceLimits(
 export function resolveChannelPolicy(
 	origin: Pick<OriginRef, "platform" | "conversationId" | "parentId">,
 	config: GatewayConfig,
+	/**
+	 * The platform wildcard sets how the persona engages in rooms it is in; it
+	 * never names a room the persona may write into. Cross-room targets pass
+	 * `exactOnly` so a wildcard cannot turn every known room into a POST target.
+	 */
+	options: { readonly exactOnly?: boolean } = {},
 ) {
 	const ids = [origin.conversationId, origin.parentId].filter((id): id is string => id !== undefined);
 	for (const id of ids) {
@@ -373,7 +379,7 @@ export function resolveChannelPolicy(
 			if (legacy) return legacy;
 		}
 	}
-	return undefined;
+	return options.exactOnly ? undefined : config.channels?.[`${origin.platform}:*`];
 }
 
 function closedAuthorAuthorized(authorId: string, config: GatewayConfig): boolean {

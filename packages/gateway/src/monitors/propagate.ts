@@ -1264,7 +1264,7 @@ export class MonitorPropagator {
 								entry.note as string,
 							);
 							if (!authored) return false;
-							if (!this.#database.memory.get(intentId))
+							if (this.#memory.captureEnabled !== false && !this.#database.memory.get(intentId))
 								this.#database.memory.createIntent(tx, {
 									id: intentId,
 									kind: "monitor-event",
@@ -1282,7 +1282,7 @@ export class MonitorPropagator {
 						if (!authoredOk) continue;
 						// Wake the closure queue so the atomically admitted intent is
 						// processed in the same run (no restart needed).
-						this.#memory.enqueueExistingId(intentId);
+						if (this.#memory.captureEnabled !== false) this.#memory.enqueueExistingId(intentId);
 						if (reportable && monitor.reportTo) this.#notifyMonitorReport(monitor.reportTo);
 						this.#emit({
 							eventId: entry.eventId,
@@ -1868,7 +1868,7 @@ export class MonitorPropagator {
 		const authored = this.#database.transaction((tx) => {
 			const updated = this.#database.monitors.authorFenced(tx, eventId, "", note, noDelivery);
 			if (!updated) return false;
-			if (!this.#database.memory.get(intentId))
+			if (this.#memory.captureEnabled !== false && !this.#database.memory.get(intentId))
 				this.#database.memory.createIntent(tx, {
 					id: intentId,
 					kind: "monitor-event",
@@ -1885,7 +1885,7 @@ export class MonitorPropagator {
 		});
 		if (!authored) return;
 		// Wake the closure queue for the intent admitted above.
-		this.#memory.enqueueExistingId(intentId);
+		if (this.#memory.captureEnabled !== false) this.#memory.enqueueExistingId(intentId);
 		if (reportable && monitor?.reportTo) this.#notifyMonitorReport(monitor.reportTo);
 		this.#emitStage(eventRow, noDelivery ? "authored_no_delivery" : "authored");
 	}

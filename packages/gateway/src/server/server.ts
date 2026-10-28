@@ -972,7 +972,9 @@ function createRuntime(options: GatewayServerOptions): Runtime {
 	const delivery = new DeliveryService(options.database);
 	const botAudienceTurns = new BotAudienceTurnGuard(options.database.core);
 	const registry = new MonitorRegistry(options.database);
-	const memory = new MemoryClosureQueue(options.database, options.config.home);
+	const memory = new MemoryClosureQueue(options.database, options.config.home, {
+		capture: options.config.memory?.capture,
+	});
 	const readiness = new FunctionalReadiness();
 	const broker = options.broker;
 	const listProviderModels = options.listProviderModels ?? (broker ? () => broker.listAvailableModels() : undefined);
@@ -2923,6 +2925,8 @@ async function sendChat(
 					receivedAt: matchedAt,
 				});
 				if (!wakeAccepted) throw new Error(`watch wake ${wakeId} already exists before watch ${watch.watch_id} fired`);
+				watchWakeOrigins.push(watch.watcher_origin_key);
+				if (runtime.memory.captureEnabled === false) continue;
 				const intentId = `watch-audit:fired:${watch.watch_id}`;
 				options.database.memory.createIntent(tx, {
 					id: intentId,
@@ -2934,7 +2938,6 @@ async function sendChat(
 						replyText: `An information-only wake was enqueued for ${watch.watcher_origin_key}. Message text, attachments, watch reason, and secrets were omitted.`,
 					}),
 				});
-				watchWakeOrigins.push(watch.watcher_origin_key);
 				memoryIntentIds.push(intentId);
 			}
 			return { accepted, watchWakeOrigins, memoryIntentIds };
@@ -3422,6 +3425,7 @@ async function createInboundTurnLifecycle(
 				engagementJson: JSON.stringify({ mentioned: false, group: relay.origin.kind !== "dm", handoff: provenance }),
 			});
 			if (!accepted) return { accepted, auditIntentId: undefined };
+			if (runtime.memory.captureEnabled === false) return { accepted, auditIntentId: undefined };
 			const auditIntentId = `wake-audit:enqueued:${wakeId}`;
 			options.database.memory.createIntent(tx, {
 				id: auditIntentId,
@@ -3494,6 +3498,7 @@ async function createInboundTurnLifecycle(
 				expiresAt,
 			});
 			if (registration.kind !== "registered") return { registration, auditIntentId: undefined };
+			if (runtime.memory.captureEnabled === false) return { registration, auditIntentId: undefined };
 			const auditIntentId = `watch-audit:registered:${watchId}`;
 			options.database.memory.createIntent(tx, {
 				id: auditIntentId,
@@ -4613,15 +4618,15 @@ function resolveSpelledPost(target: OriginRef, origin: OriginRef, config: Gatewa
 	if (target.platform !== origin.platform || !isChatPlatform(target.platform))
 		return { ok: false, reason: "other_platform" };
 	if (target.kind !== "channel") return { ok: false, reason: "not_a_channel" };
-	if (!resolveChannelPolicy(target, config)) return { ok: false, reason: "unconfigured_channel" };
+	if (!resolveChannelPolicy(target, config, { exactOnly: true })) return { ok: false, reason: "unconfigured_channel" };
 	return { ok: true, target, key };
 }
 
 /**
  * Where a [POST:] part may go: a `channel` on the current platform that the
- * gateway configuration lists, however its target is spelled. DMs, threads,
- * other platforms and unlisted rooms are refused so a persona cannot write
- * into a conversation nobody configured.
+ * gateway configuration lists by its own id (a platform wildcard does not count),
+ * however its target is spelled. DMs, threads, other platforms and unlisted rooms
+ * are refused so a persona cannot write into a conversation nobody configured.
  */
 export function resolvePostTarget(raw: string, origin: OriginRef, config: GatewayConfig): PostTargetResolution {
 	const spelled = spelledConversation(raw, origin, config);

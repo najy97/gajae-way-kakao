@@ -33,6 +33,7 @@ export type RecoveryReport = {
 };
 
 export class MemoryClosureQueue {
+	readonly captureEnabled: boolean;
 	readonly #database: Store;
 	readonly #home: string;
 	#tail: Promise<void> = Promise.resolve();
@@ -44,9 +45,10 @@ export class MemoryClosureQueue {
 	/** Test hook: invoked after appendDaily, before commit (for #341 regression test). */
 	readonly #afterWrite?: () => Promise<void>;
 
-	constructor(database: Store, home: string, options?: { afterWrite?: () => Promise<void> }) {
+	constructor(database: Store, home: string, options?: { capture?: boolean; afterWrite?: () => Promise<void> }) {
 		this.#database = database;
 		this.#home = home;
+		this.captureEnabled = options?.capture !== false;
 		this.#afterWrite = options?.afterWrite;
 	}
 
@@ -115,7 +117,9 @@ export class MemoryClosureQueue {
 		return this.recovery;
 	}
 
+	/** Returns an empty-string sentinel when capture is disabled; no intent is created or work scheduled. */
 	enqueue(mutation: MemoryMutation): string {
+		if (!this.captureEnabled) return "";
 		const id = crypto.randomUUID();
 		// The SQLite insert is the acceptance boundary; work starts only after it returns.
 		this.#database.transaction((tx) =>

@@ -41,6 +41,12 @@ The `gajaeway up` command:
 - Validates tokens against each platform API
 - Reports next steps (daemon start, service installation, etc.)
 
+### Local chat sessions
+
+`gajaeway chat` opens the terminal REPL using the default `loopback/loopback/loopback` origin. `gajaeway chat --conversation scenario-42` instead uses `{ "platform": "loopback", "kind": "loopback", "conversationId": "scenario-42" }`, giving each scenario its own gateway session. Reusing the same id resumes that origin's session. The id is validated before connecting: it must be 1 to 256 characters using letters, digits, `_`, `.`, `:`, `@`, `+` or `-`; empty or malformed ids are usage errors (exit 2). This isolates session history, not shared memory capture; use `memory.capture: false` when shared daily capture is undesirable.
+
+`gajaeway chat --once` reads all of stdin as one message, preserving embedded newlines and whitespace and removing only one final LF or CRLF. It can be combined with `--conversation <id>` in either order, for example `printf 'first line\nsecond line\n' | gajaeway chat --conversation scenario-42 --once`. It prints every `chat.message` text for that turn, without a REPL prompt, waits for the final message, and exits 0. An unengaged message or the 30-minute final-message timeout prints a diagnostic on stderr and exits 1. Other turns' events are not printed. Without `--once`, interactive behavior is unchanged.
+
 ## Production unit
 
 Production runs the compiled standalone binaries. Build them on a machine with Bun:
@@ -186,6 +192,10 @@ Outbound secret redaction is always on and is configured only through the gatewa
 ```
 
 `socketPath`, `dbPath`, `logVerbosity`, credentials, channels, webhook, watcher roots, script root, `monitorCatchUp`, `stallTimeoutMs`, `sessions`, and `sqlite` are optional. Socket and database paths default inside the home directory, `stallTimeoutMs` defaults to 120000 ms, and log verbosity defaults to `info`.
+
+`channels["<platform>:*"]` supplies a platform-wide default policy for unlisted rooms. Resolution checks the exact conversation id first, then its parent id (namespaced keys and Discord's legacy bare-id keys), then the platform wildcard. An exact entry wins as a whole, even if empty; fields are not merged with the wildcard. For example, `"channels": { "kakao:*": { "engagement": "open", "audience": "human-only" } }` engages humans in every Kakao group room without listing unpredictable room keys. It does not open DMs, whose `dmPolicy` still applies, or affect other platforms. Bootstrap metadata, bot-audience limits and thread-mute addressing use the same resolved policy. A wildcard only decides how the persona engages in rooms it is already in: it never makes another room a cross-room POST/SEND/REPLY target. Those targets still need their own exact `channels` entry, so a prompt-injected turn in one room cannot write into the other rooms the bot knows, and a bare reply id under a wildcard stays a message id.
+
+`memory.capture` defaults to `true`. Set `"memory": { "capture": false }` for a public multi-room bot to stop creating new shared daily captures from chat, authored monitor events, and wake/watch audits. This is restart-required. Existing durable intents still recover, and existing corpus files and monitors are not removed. The three default memory-maintenance monitors are neither seeded nor marked as seeded while capture is disabled, so enabling it later can seed them. Remove existing monitors with `gajaeway monitors remove <id>`. See [Memory](memory.md) for the exact capture and recovery behavior.
 
 `sessions.idleResetMs` is an optional 60000–2592000000 ms idle window. When set, the 60-second sweep rotates a quiet non-loopback, non-monitor persona session like `/new`; it skips running turns and sessions already unbound after a previous rotation. Unlike `sessions.idleRetireMs`, which ends an idle host but preserves its session history, this deliberately starts the conversation's next turn with fresh context. `sessions.busyStallMs` (60000–86400000 ms, default 300000) bounds a pre-send busy wait on a host whose inspect activity stamp and saved transcript stop moving; past it the host is ended and the session resumed on a new host (#687). `sessions.unresolvedHoldMs` (60000–86400000 ms, default 600000) bounds how long one turn with unknown operation state on a dead host may hold its origin before it moves to a retired hold and newer messages continue on a fresh session (#686). The `sessions` object is reloadable.
 
@@ -484,7 +494,7 @@ A running gateway re-reads `config.json` on `SIGHUP` (`kill -HUP <pid>`) or on t
 The reload is fail-safe and reports exactly what it did:
 
 - `changed` — fields applied live: `mentionAllowlist`, `channels`, `stallTimeoutMs`, `dmPolicy`, `botAudience`, `sessions`, `restartNotice`, and `handoffTargets` (alias -> chat `OriginRef` for `[HANDOFF:<alias>] note [HANDOFFDONE]`, `[WAKE:<alias>]`, `[WATCH:<alias>]`, and as a `[POST:<alias>]` target spelling). Verify the next event through the path consuming the changed policy.
-- `restartRequired` — fields bound to startup resources: `socketPath`, `dbPath`, `model`, `serviceTier`, `credentials`, `webhook`, `watcherRoots`, `scriptRoot`, `runtime`, `ownerTarget`, `monitorContextFailureRollThreshold`, `monitorCatchUp`, `work`, `gjc`, `sqlite`, and `interimSpeech`. They are reported and deliberately NOT applied; restart to pick them up.
+- `restartRequired`: fields bound to startup resources: `socketPath`, `dbPath`, `model`, `serviceTier`, `credentials`, `webhook`, `watcherRoots`, `scriptRoot`, `runtime`, `ownerTarget`, `monitorContextFailureRollThreshold`, `monitorCatchUp`, `memory`, `work`, `gjc`, `sqlite`, and `interimSpeech`. They are reported and deliberately NOT applied; restart to pick them up.
 - `ignored` — fields you edited that no code reads at all. `logVerbosity` is currently parsed but unconsumed, so editing it has no effect and no restart would give it one.
 - On a parse or validation error, or when `config.json` is missing or unreadable, the reload fails, keeps the previous configuration untouched, and returns a diagnostic. A missing file never publishes defaults over live policy, because that would drop the mention allowlist and open a mention-gated room.
 

@@ -104,6 +104,8 @@ Adding an axis to an existing corpus is additive only. Startup creates the missi
 
 Each completed chat turn and each authored monitor event is captured in the current UTC daily file. A capture records timestamp, origin, speaker (`author @ #channel | server`), user/event text, and reply text; each text field is bounded to 500 characters. This gives the canonicalization routine raw daily material to sort into the canonical axes.
 
+`memory.capture` is an optional boolean in `config.json`, defaulting to `true` and requiring a gateway restart to change. With `{ "memory": { "capture": false } }`, new turns, authored monitor events, and cross-session wake/watch audits create no daily-capture intents or daily Markdown writes. Existing durable intents still recover at boot; existing corpus files, manual memory operations and per-origin session history are unchanged. This prevents new shared daily captures from feeding one public room's conversation into another room through canonicalization. It does not erase previously shared memory or disable existing monitors.
+
 The daily axis has two layers: flat `daily/YYYY-MM-DD.md` files are the gateway-written raw capture layer and must never be edited or moved, while persona-curated digests live in `daily/YYYY-MM/` subdirectories. Axis subdirectories are fully supported at any depth: map generation, audit and retrieval all walk an axis recursively.
 
 There is exactly **one** traversal behind those three, and that is deliberate: a file the map serves must be a file the audit inspects, or an unpartitioned rule can be indexed and recalled while never being reported. It follows directory symlinks — an axis rooted at a symlink still gets audited — bounded by `realpath` bookkeeping so a symlink cycle terminates. Symlinked *files* are skipped, since they are a second name for content already indexed under its real path.
@@ -113,6 +115,8 @@ Startup is safe to call concurrently. Adapters, monitors and the closure queue a
 ## Default maintenance monitors
 
 These are seeded automatically on a database's first boot (removals are never resurrected); a monitor without its own channel target reports to the configured `ownerTarget`:
+
+When `memory.capture` is `false`, none of these defaults are seeded or marked as seeded. Turning capture back on later seeds any defaults not previously seeded. Existing monitors are left alone; remove unwanted ones explicitly with `gajaeway monitors remove <id>`.
 
 | Monitor | Local schedule | Event type | Burst policy | Target |
 |---|---:|---|---|---|

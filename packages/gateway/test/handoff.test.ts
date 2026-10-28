@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ConfigError, type GatewayConfig, parseConfigFile } from "../src/config";
@@ -64,7 +64,7 @@ async function settle(): Promise<void> {
 type Replies = Record<string, (turnText: string) => string>;
 
 /** Three open channels; each origin's session answers with its own scripted reply. */
-async function gateway(replies: Replies) {
+async function gateway(replies: Replies, capture = true) {
 	directory = await mkdtemp(join(tmpdir(), "gajaeway-handoff-"));
 	const config: GatewayConfig = {
 		schemaVersion: 1,
@@ -76,6 +76,7 @@ async function gateway(replies: Replies) {
 		logVerbosity: "info",
 		channels: { "chan-a": { engagement: "open" }, "chan-b": { engagement: "open" }, "chan-c": { engagement: "open" } },
 		handoffTargets: { "gajae-way-dev": B, ops: C, marketing: A },
+		memory: { capture },
 	};
 	const database = await Store.open(config.dbPath);
 	const turns: Array<{ originKey: string; text: string }> = [];
@@ -664,6 +665,31 @@ test("a watch expires and fires at most once for its next accepted message", asy
 		state: "fired",
 		triggered_message_id: "next-message",
 	});
+});
+
+test("disabled capture preserves chat, post, wake and watch delivery without creating daily intents", async () => {
+	const { client, database, turns } = await gateway(
+		{
+			[KEY_A]: (text) =>
+				text.includes("INTERNAL WATCH WAKE")
+					? "Observed the watched message."
+					: "Waiting here.\n[POST:discord/channel/chan-c] Posted update. [POSTDONE]\n[WATCH:gajae-way-dev] 30m wait for the next message\n[WAKE:ops] an update is available",
+			[KEY_B]: () => "Answered in B.",
+			[KEY_C]: () => "Noted the update.",
+		},
+		false,
+	);
+	say(client, A, "capture-off-register", "Set up the watch and update.");
+	await settle();
+	expect(database.inbox.watchRows()).toHaveLength(1);
+	expect(turns.some((turn) => turn.originKey === KEY_C && turn.text.includes("INTERNAL WAKE"))).toBe(true);
+	expect(delivered(client, "chan-c")).toContain("Posted update.");
+	say(client, B, "capture-off-next", "Next watched message.");
+	await settle();
+	expect(database.inbox.watchRows()[0]?.state).toBe("fired");
+	expect(delivered(client, "chan-a")).toContain("Observed the watched message.");
+	expect(database.memory.rows()).toEqual([]);
+	expect((await readdir(join(directory, "memory", "daily"))).filter((name) => name.endsWith(".md"))).toEqual([]);
 });
 
 test("a watch cannot route back to an origin already in its handoff chain", async () => {

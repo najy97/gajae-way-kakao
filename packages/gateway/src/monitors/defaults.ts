@@ -46,7 +46,9 @@ const seedFlag = (name: string) => `default_monitor_seeded:${name}`;
  * (operator-created under the same name) is recorded as seeded, so removing it
  * later is final too.
  */
-export function seedDefaultMonitors(registry: MonitorRegistry, database: Store): number {
+export function seedDefaultMonitors(registry: MonitorRegistry, database: Store, capture = true): number {
+	// Do not record seed flags while disabled: enabling capture later must still seed defaults.
+	if (!capture) return 0;
 	const existingNames = new Set(registry.list().map((monitor) => monitor.name));
 	const legacy = database.core.metaGet(LEGACY_SEED_FLAG) !== undefined;
 	const at = new Date().toISOString();

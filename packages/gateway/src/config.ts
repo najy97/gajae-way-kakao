@@ -149,7 +149,7 @@ export interface GatewayConfigFile {
 	readonly interimSpeech?: InterimSpeechConfig;
 	/** Named `[HANDOFF:<alias>]` targets (issue #72): alias -> the chat origin whose session takes the work. */
 	readonly handoffTargets?: Readonly<Record<string, OriginRef>>;
-	/** Memory-maintenance settings. */
+	/** Shared memory capture and maintenance settings. */
 	readonly memory?: MemoryConfig;
 	/** Optional absolute path override for the broker agent directory. */
 	readonly gjc?: { readonly agentDir?: string } | undefined;
@@ -198,6 +198,8 @@ export interface InterimSpeechConfig {
 }
 
 export interface MemoryConfig {
+	/** Capture completed turns and authored monitor events into shared daily memory; defaults to true. */
+	readonly capture?: boolean;
 	/**
 	 * Byte size threshold for memory.debloat detector: files in memory/ larger than
 	 * this value (in bytes) are flagged as oversized and routed for restructuring.
@@ -471,9 +473,15 @@ function parseMemory(value: unknown): MemoryConfig {
 	const section = "memory";
 	const input = requireObject(value, section);
 	for (const key of Object.keys(input))
-		if (key !== "debloatByteThreshold") throw new ConfigError("config_invalid", `${section} contains an unknown field`);
+		if (key !== "debloatByteThreshold" && key !== "capture")
+			throw new ConfigError("config_invalid", `${section} contains an unknown field`);
+	if (input.capture !== undefined && typeof input.capture !== "boolean")
+		throw new ConfigError("config_invalid", `${section}.capture must be a boolean`);
 	const debloatByteThreshold = parsePositiveInteger(input.debloatByteThreshold, `${section}.debloatByteThreshold`);
-	return debloatByteThreshold === undefined ? {} : { debloatByteThreshold };
+	return {
+		...(input.capture === undefined ? {} : { capture: input.capture }),
+		...(debloatByteThreshold === undefined ? {} : { debloatByteThreshold }),
+	};
 }
 
 function parseStallTimeout(value: unknown): number {

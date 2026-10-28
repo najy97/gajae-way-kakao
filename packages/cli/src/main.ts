@@ -3,6 +3,7 @@
 import { isAbsolute, resolve } from "node:path";
 
 import type {
+	ChatMessagePayload,
 	MonitorEventOperatorResult,
 	MonitorEventRecord,
 	MonitorRecord,
@@ -14,6 +15,7 @@ import type {
 	OpsDeliveriesResult,
 	OpsSloParams,
 	OpsSloResult,
+	OriginRef,
 	WorkJobsParams,
 	WorkJobsResult,
 	WorkRetireResult,
@@ -23,7 +25,13 @@ import type {
 	WorkStatusResult,
 	WorkSteerResult,
 } from "@gajae-gateway/protocol";
-import { LOOPBACK_ORIGIN, OPS_CYCLE_MAX_LIMIT, originKey, WORK_JOBS_MAX_LIMIT } from "@gajae-gateway/protocol";
+import {
+	LOOPBACK_ORIGIN,
+	OPS_CYCLE_MAX_LIMIT,
+	originKey,
+	validateOriginRef,
+	WORK_JOBS_MAX_LIMIT,
+} from "@gajae-gateway/protocol";
 
 import { GajaewayClient } from "@gajae-gateway/sdk";
 import pkg from "../package.json";
@@ -87,7 +95,7 @@ export const COMMANDS = [
 ] as const;
 
 export const CLI_USAGE =
-	"usage: gajaeway [--version] [--socket PATH] status|shutdown|chat|daemon run|sessions list [--json] [--fields a,b,c] [--limit N] [--offset N]|sessions inspect <originKey-or-index>|memory audit|memory search <query>|monitors ... (settle <eventId>|retry <eventId>|test <id> [--type T] [--payload J] [--wait[=SECONDS]])|work run|start <name> [--cwd DIR] [--repo PATH|URL [--base REF]] [--resume] [--model ID|--preset NAME] [--notify originKey (start only)] <text>|work status <name>|work steer <name> <text>|work retire [--force] <name>|work retire --all-dead|work jobs [--limit N] [--offset N]|ops backup <path>|ops deliveries [--since ISO] [--state S] [--limit N] [--json]|ops redeliver <deliveryId>|ops redeliver --since <iso>|ops cycle [--limit N] [--offset N] [--json]|ops integrity|ops restart-stack [--status|--recover --confirm-service-manager-settled]|services install|repair --bin-dir DIR [--launch-agents-dir DIR] [--unit-dir DIR] [--platform darwin|linux]|migrate [--source PATH] [--target PATH] [--dry-run]|update [--check] [--force] [--bin-dir DIR] [--no-restart]|setup [--from-env] [--adapters discord,slack,telegram] [--owner ID] [--discord-app-id ID]|setup --status|setup --broker-agent [--from DIR] (work run waits for a response; caller timeout does not end the attempt); cron timezone is an IANA zone and defaults to the gateway host's local timezone";
+	"usage: gajaeway [--version] [--socket PATH] status|shutdown|chat [--conversation <id>] [--once]|daemon run|sessions list [--json] [--fields a,b,c] [--limit N] [--offset N]|sessions inspect <originKey-or-index>|memory audit|memory search <query>|monitors ... (settle <eventId>|retry <eventId>|test <id> [--type T] [--payload J] [--wait[=SECONDS]])|work run|start <name> [--cwd DIR] [--repo PATH|URL [--base REF]] [--resume] [--model ID|--preset NAME] [--notify originKey (start only)] <text>|work status <name>|work steer <name> <text>|work retire [--force] <name>|work retire --all-dead|work jobs [--limit N] [--offset N]|ops backup <path>|ops deliveries [--since ISO] [--state S] [--limit N] [--json]|ops redeliver <deliveryId>|ops redeliver --since <iso>|ops cycle [--limit N] [--offset N] [--json]|ops integrity|ops restart-stack [--status|--recover --confirm-service-manager-settled]|services install|repair --bin-dir DIR [--launch-agents-dir DIR] [--unit-dir DIR] [--platform darwin|linux]|migrate [--source PATH] [--target PATH] [--dry-run]|update [--check] [--force] [--bin-dir DIR] [--no-restart]|setup [--from-env] [--adapters discord,slack,telegram] [--owner ID] [--discord-app-id ID]|setup --status|setup --broker-agent [--from DIR] (work run waits for a response; caller timeout does not end the attempt); cron timezone is an IANA zone and defaults to the gateway host's local timezone";
 
 /** Usage errors exit 2, as `gajaeway-gateway` does; 1 stays a runtime failure. */
 export const USAGE_EXIT_CODE = 2;
@@ -567,7 +575,38 @@ export function renderDeliveries(result: OpsDeliveriesResult): string[] {
 
 const CHAT_TURN_TIMEOUT_MS = 30 * 60_000;
 
-async function chat(socket: string): Promise<void> {
+export interface ChatOptions {
+	readonly origin: OriginRef;
+	readonly once: boolean;
+}
+
+export function parseChatArgs(args: readonly string[]): ChatOptions {
+	const usage = "usage: gajaeway chat [--conversation <id>] [--once]";
+	let conversationId: string | undefined;
+	let once = false;
+	for (let index = 0; index < args.length; index++) {
+		if (args[index] === "--once" && !once) once = true;
+		else if (args[index] === "--conversation" && conversationId === undefined) {
+			const value = args[++index];
+			if (!value || value.startsWith("--")) throw new Error(usage);
+			conversationId = value;
+		} else throw new Error(usage);
+	}
+	try {
+		return {
+			once,
+			origin:
+				conversationId === undefined
+					? LOOPBACK_ORIGIN
+					: validateOriginRef({ platform: "loopback", kind: "loopback", conversationId }),
+		};
+	} catch (error) {
+		throw new Error(`${usage}\n${error instanceof Error ? error.message : String(error)}`);
+	}
+}
+
+async function chat(socket: string, { origin, once }: ChatOptions): Promise<void> {
+	const onceInput = once ? (await Bun.stdin.text()).replace(/\r?\n$/, "") : "";
 	let client: GajaewayClient;
 	try {
 		client = await connectGatewaySocket(socket);
@@ -577,32 +616,77 @@ async function chat(socket: string): Promise<void> {
 		return;
 	}
 	const turnWaiters = new Map<string, () => void>();
-	client.onChatMessage((message) => {
+	const pendingMessages: ChatMessagePayload[] = [];
+	let onceTurnId: string | undefined;
+	const printMessage = (message: ChatMessagePayload) => {
 		console.log(message.text);
 		if (message.final) turnWaiters.get(message.turnId)?.();
+	};
+	client.onChatMessage((message) => {
+		if (!once) printMessage(message);
+		else if (onceTurnId === undefined) pendingMessages.push(message);
+		else if (message.turnId === onceTurnId) printMessage(message);
 	});
-	const sendAndWait = async (text: string): Promise<void> => {
-		const { turnId } = await client.chatSend(LOOPBACK_ORIGIN, text);
+	// A turn that ends silent ([SILENT]) or without a final chat.message still ends with
+	// chat.progress final, written after every chat.message of that turn on this socket.
+	// Finals are buffered only while a chat.send response is outstanding (a fast turn can
+	// finish before its response names it); the buffer is dropped once the turn is known.
+	const progressFinals = new Set<string>();
+	let sendInFlight = false;
+	client.onChatProgress((progress) => {
+		if (!progress.final) return;
+		const waiter = turnWaiters.get(progress.turnId);
+		if (waiter) waiter();
+		else if (sendInFlight) progressFinals.add(progress.turnId);
+	});
+	const sendAndWait = async (text: string): Promise<boolean> => {
+		sendInFlight = true;
+		let response: Awaited<ReturnType<GajaewayClient["chatSend"]>>;
+		try {
+			response = await client.chatSend(origin, text);
+		} finally {
+			sendInFlight = false;
+		}
+		const { turnId } = response;
 		if (turnId === null) {
+			progressFinals.clear();
 			console.error("(message was not engaged)");
-			return;
+			return false;
 		}
 		// The gateway's own request wait is 30 minutes; a max-effort reasoning
 		// turn routinely runs past two. Match the server so the REPL does not
 		// abandon a turn the gateway is still delivering.
-		await new Promise<void>((resolve) => {
+		const completed = new Promise<boolean>((resolve) => {
 			const timer = setTimeout(() => {
 				turnWaiters.delete(turnId);
 				console.error(`(turn timed out after ${CHAT_TURN_TIMEOUT_MS / 60_000}m)`);
-				resolve();
+				resolve(false);
 			}, CHAT_TURN_TIMEOUT_MS);
 			turnWaiters.set(turnId, () => {
 				clearTimeout(timer);
 				turnWaiters.delete(turnId);
-				resolve();
+				resolve(true);
 			});
 		});
+		if (once) {
+			onceTurnId = turnId;
+			// A fast final event can arrive before the chat.send response names its turn.
+			for (const message of pendingMessages) if (message.turnId === turnId) printMessage(message);
+			pendingMessages.length = 0;
+		}
+		const finishedEarly = progressFinals.has(turnId);
+		progressFinals.clear();
+		if (finishedEarly) turnWaiters.get(turnId)?.();
+		return completed;
 	};
+	if (once) {
+		try {
+			if (!(await sendAndWait(onceInput))) process.exitCode = 1;
+		} finally {
+			await client.close();
+		}
+		return;
+	}
 	const reader = Bun.stdin.stream().getReader();
 	const decoder = new TextDecoder();
 	let buffer = "";
@@ -699,9 +783,18 @@ export async function main(args = process.argv.slice(2), options: MainOptions = 
 				}
 				break;
 			}
-			case "chat":
-				await chat(parsed.socket);
+			case "chat": {
+				let chatOptions: ChatOptions;
+				try {
+					chatOptions = parseChatArgs(parsed.rest);
+				} catch (error) {
+					console.error(error instanceof Error ? error.message : String(error));
+					process.exitCode = USAGE_EXIT_CODE;
+					return;
+				}
+				await chat(parsed.socket, chatOptions);
 				break;
+			}
 			case "daemon":
 				if (parsed.rest[0] === "run")
 					console.log("Launch the gateway out-of-band with: bun packages/gateway/src/main.ts daemon");

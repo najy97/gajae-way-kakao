@@ -156,9 +156,8 @@ export async function bootGateway(options: BootGatewayOptions = {}): Promise<Boo
 			await waitForBroker("preflight", () => client.preflight(), options.brokerWait);
 			const persona = new PersonaLoader(config.home);
 			await persona.ensureWorkspace();
-			// Generic product default: memory maintenance crons exist on every fresh
-			// deployment (seeded once; operator removals are never resurrected).
-			seedDefaultMonitors(new MonitorRegistry(database), database);
+			// Seed memory maintenance only when capture is enabled; operator removals stay final.
+			seedDefaultMonitors(new MonitorRegistry(database), database, config.memory?.capture);
 			const ledger = new DeliveryService(database);
 			const pruned = ledger.prune(7 * 24 * 60 * 60 * 1000);
 			const pending = ledger.listUndelivered(24 * 60 * 60 * 1000).length;
