@@ -1,0 +1,17 @@
+modelRoles:
+  # Primary first; gjc falls back down the chain when the primary is rate limited or unavailable.
+  default:
+    - openai-codex/gpt-6.1-terra:xhigh
+    - anthropic/claude-opus-5-5:high
+defaultThinkingLevel: xhigh
+memories:
+  enabled: false
+calc:
+  enabled: true
+startup:
+  checkUpdate: false
+notifications:
+  enabled: false
+skills:
+  enabled: false
+configSchemaVersion: 2

@@ -1,0 +1,88 @@
+# Contest-only gajae-way instance for the AI_TOP_100 Kakao bot.
+# Operate it with deploy/apply.sh (all | knowledge | test | status | login | provision | watch | logs).
+#
+# runtime: broker + gateway + persona tools. Internal network only; its only way out
+#          is the proxy, which allows model-provider domains plus registry.npmjs.org
+#          (gjc reads the latest Codex CLI version there; without it the ChatGPT model
+#          catalog falls back to an old client and omits current models).
+# kakao:   Kakao adapter. Holds the bot token, has normal egress (Kakao API), no LLM tools.
+#          Reaches the gateway through the shared Unix socket.
+#
+# Trust boundary (known limits): persona tools run as the same UID as the broker and
+# gateway, so a prompt-injected turn can read AND modify model credentials (agent.db),
+# gateway state and memory, and use gateway.sock (e.g. recall other rooms'
+# conversations). Gateway chat redaction only masks known secrets in outgoing chat; it
+# does not hide ordinary conversation content. The proxy limits destinations, not
+# what is sent to the allowed model-provider APIs. What IS enforced: no Kakao token in
+# this container, no network route except the proxy, persona files and the workspace
+# mount are root-owned and not replaceable, and the root entrypoint refuses planted
+# symlinks.
+name: aitop100
+
+x-image: &image
+  image: aitop100-gajaeway:latest
+  restart: unless-stopped
+  init: true
+  user: "0"
+
+services:
+  runtime:
+    <<: *image
+    build:
+      context: .
+      additional_contexts:
+        # Set in deploy/.env (untracked): GAJAEWAY_SRC=<gajae-way-kakao checkout, branch feat/adapter-kakao>
+        gajaeway: ${GAJAEWAY_SRC:?set GAJAEWAY_SRC in deploy/.env to the gajae-way-kakao checkout}
+    command: ["runtime"]
+    networks: [internal]
+    environment:
+      HTTPS_PROXY: http://proxy:8888
+      HTTP_PROXY: http://proxy:8888
+      https_proxy: http://proxy:8888
+      http_proxy: http://proxy:8888
+      NO_PROXY: 127.0.0.1,localhost
+      no_proxy: 127.0.0.1,localhost
+    volumes:
+      - home:/home/gajaeway/.gajaeway
+      # Separate mount: the persona owns $home but cannot rename a mountpoint away.
+      - workspace:/home/gajaeway/.gajaeway/workspace
+      - ./contest:/contest:ro
+      - ./workspace:/contest-workspace:ro
+      # model.env: ANTHROPIC_OAUTH_TOKEN=... (claude setup-token) for the fallback model.
+      # The primary model (openai-codex) logs in with `apply.sh login`; its credential lives in agent.db.
+      - ./secrets:/contest-secrets:ro
+    depends_on: [proxy]
+    healthcheck:
+      test: ["CMD", "setpriv", "--reuid=1001", "--regid=1001", "--init-groups", "gajaeway", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  proxy:
+    <<: *image
+    command: ["proxy"]
+    networks: [internal, egress]
+
+  kakao:
+    <<: *image
+    command: ["kakao"]
+    networks: [egress]
+    env_file: ../.env
+    volumes:
+      - home:/home/gajaeway/.gajaeway
+      - kakao:/home/gajaeway/kakao
+      - ./contest:/contest:ro
+    depends_on:
+      runtime:
+        condition: service_healthy
+
+networks:
+  internal:
+    internal: true
+  egress: {}
+
+volumes:
+  home:
+  workspace:
+  kakao:

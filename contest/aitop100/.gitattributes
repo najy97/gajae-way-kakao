@@ -1,0 +1,5 @@
+# Scripts, configs and persona files run inside Linux containers or WSL bash: keep LF on every
+# checkout, including Git for Windows with core.autocrlf=true (CRLF breaks `#!/usr/bin/env bash`,
+# env files and the bind-mounted contest config).
+* text=auto eol=lf
+*.png binary

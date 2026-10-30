@@ -16,7 +16,7 @@
 </p>
 
 > [!NOTE]
-> **Modified version.** This repository ([najy97/gajae-way-kakao](https://github.com/najy97/gajae-way-kakao), branch `feat/adapter-kakao`) is a modified version of [Yeachan-Heo/gajae-way](https://github.com/Yeachan-Heo/gajae-way), changed by 나준영 (najy97) on 2026-10-28 on top of upstream commit `8b3899ca4`. It adds a Kakao Talk bot adapter (`packages/adapter-kakao`), a `memory.capture` switch, a platform-wide channel policy, `gajaeway chat --conversation/--once`, and @mentions in Kakao group replies. It runs the Kakao Talk bot entered in AI_TOP_100 [2026]; if you interact with that bot, this repository is its Corresponding Source under section 13 of the AGPL-3.0. See [License](#license).
+> **Modified version.** This repository ([najy97/gajae-way-kakao](https://github.com/najy97/gajae-way-kakao), branch `feat/adapter-kakao`) is a modified version of [Yeachan-Heo/gajae-way](https://github.com/Yeachan-Heo/gajae-way), changed by 나준영 (najy97) on 2026-10-28 on top of upstream commit `8b3899ca4`. It adds a Kakao Talk bot adapter (`packages/adapter-kakao`), a `memory.capture` switch, a platform-wide channel policy, `gajaeway chat --conversation/--once`, and @mentions in Kakao group replies. It runs the Kakao Talk bot entered in AI_TOP_100 [2026], built and operated with the files in [`contest/aitop100`](contest/aitop100); if you interact with that bot, this repository is its Corresponding Source under section 13 of the AGPL-3.0. See [License](#license).
 
 <p align="center"><strong>Your AI shouldn't live in a browser tab. It should live in your DMs.</strong></p>
 
@@ -206,4 +206,5 @@ Modifications in this repository are Copyright (C) 2026 나준영 (najy97) and a
 
 - Original source: <https://github.com/Yeachan-Heo/gajae-way>
 - Source of this modified version: <https://github.com/najy97/gajae-way-kakao/tree/feat/adapter-kakao>
+- Build and run files of the AI_TOP_100 [2026] Kakao bot: [`contest/aitop100`](contest/aitop100) (the bot's persona files and secrets are not part of the program and are not published)
 - Exact changes: `git log 8b3899ca4..feat/adapter-kakao`

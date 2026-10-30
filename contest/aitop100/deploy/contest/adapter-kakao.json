@@ -1,0 +1,4 @@
+{
+  "tokenFile": "secrets/kakao-bot-token",
+  "gatewaySocket": "/home/gajaeway/.gajaeway/gateway.sock"
+}

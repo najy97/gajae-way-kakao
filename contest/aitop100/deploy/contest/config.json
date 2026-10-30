@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "dmPolicy": "open",
+  "memory": { "capture": false },
+  "channels": {
+    "kakao:*": { "engagement": "open", "audience": "human-only" }
+  }
+}

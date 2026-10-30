@@ -1,0 +1,6 @@
+(^|\.)anthropic\.com$
+(^|\.)claude\.com$
+(^|\.)claude\.ai$
+(^|\.)openai\.com$
+(^|\.)chatgpt\.com$
+^registry\.npmjs\.org$
