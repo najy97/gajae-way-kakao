@@ -16,7 +16,7 @@
 </p>
 
 > [!NOTE]
-> **수정본입니다.** 이 저장소([najy97/gajae-way-kakao](https://github.com/najy97/gajae-way-kakao), 브랜치 `feat/adapter-kakao`)는 [Yeachan-Heo/gajae-way](https://github.com/Yeachan-Heo/gajae-way)를 나준영(najy97)이 2026-10-28에 수정한 버전입니다. 원본 커밋 `8b3899ca4`를 기준으로 카카오톡 봇 어댑터(`packages/adapter-kakao`), `memory.capture` 스위치, 플랫폼 단위 채널 정책, `gajaeway chat --conversation/--once`, 카카오 그룹방 답장의 @멘션을 추가했습니다. AI_TOP_100 [2026]에 참가한 카카오톡 봇이 이 코드로 동작하고 [`contest/aitop100`](contest/aitop100)의 파일로 빌드하고 운영하며, 그 봇과 대화하는 사용자에게 이 저장소가 AGPL-3.0 제13조의 대응 소스(Corresponding Source)입니다. 자세한 내용은 [라이선스](#라이선스)를 보세요.
+> **수정본입니다.** 이 저장소([najy97/gajae-way-kakao](https://github.com/najy97/gajae-way-kakao), 브랜치 `feat/adapter-kakao`)는 [Yeachan-Heo/gajae-way](https://github.com/Yeachan-Heo/gajae-way)를 나준영(najy97)이 2026-10-28과 2026-10-30에 수정한 버전이며, 원본 0.4.2 릴리스(커밋 `32d00bacc`)를 병합했습니다. gjc 고정 버전을 0.19.0에서 0.19.2로 올렸고, 카카오톡 봇 어댑터(`packages/adapter-kakao`), `memory.capture` 스위치, 플랫폼 단위 채널 정책, `gajaeway chat --conversation/--once`, 카카오 그룹방 답장의 @멘션을 추가했습니다. AI_TOP_100 [2026]에 참가한 카카오톡 봇이 이 코드로 동작하고 [`contest/aitop100`](contest/aitop100)의 파일로 빌드하고 운영하며, 그 봇과 대화하는 사용자에게 이 저장소가 AGPL-3.0 제13조의 대응 소스(Corresponding Source)입니다. 자세한 내용은 [라이선스](#라이선스)를 보세요.
 
 <p align="center"><strong>당신의 AI는 브라우저 탭에 있으면 안 됩니다. DM에 있어야 합니다.</strong></p>
 
@@ -165,4 +165,4 @@ bun run release:publish   # 각 패키지를 빌드하고 패킹한 다음 해�
 - 원본 소스: <https://github.com/Yeachan-Heo/gajae-way>
 - 이 수정본의 소스: <https://github.com/najy97/gajae-way-kakao/tree/feat/adapter-kakao>
 - AI_TOP_100 [2026] 카카오 봇의 빌드와 실행 파일: [`contest/aitop100`](contest/aitop100) (봇의 페르소나 파일과 비밀값은 프로그램의 일부가 아니므로 공개하지 않습니다)
-- 변경 내역: `git log 8b3899ca4..feat/adapter-kakao`
+- 변경 내역: `git log --no-merges 32d00bacc..feat/adapter-kakao`
