@@ -2,10 +2,10 @@ import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { GatewayConfig } from "../../gateway/src/config";
-import { startUnixServer } from "../../gateway/src/server/server";
-import { Store } from "../../gateway/src/store";
-import { attachTestBrokerOwnership, ScriptedSessionPort } from "../../gateway/test/session-port.fake";
+import type { GatewayConfig } from "../src/config";
+import { startUnixServer } from "../src/server/server";
+import { Store } from "../src/store";
+import { attachTestBrokerOwnership, ScriptedSessionPort } from "./session-port.fake";
 
 async function eventually(predicate: () => boolean, message: string): Promise<void> {
 	for (let attempt = 0; attempt < 400; attempt++) {
@@ -46,7 +46,7 @@ for (const [answer, expected] of [
 		const child = Bun.spawn(
 			[
 				process.execPath,
-				join(import.meta.dir, "../src/main.ts"),
+				join(import.meta.dir, "../../cli/src/main.ts"),
 				"--socket",
 				config.socketPath,
 				"chat",
