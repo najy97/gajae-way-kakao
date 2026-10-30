@@ -15,6 +15,9 @@
   <img alt="Runtime" src="https://img.shields.io/badge/runtime-TypeScript-3178C6?logo=typescript&logoColor=white">
 </p>
 
+> [!NOTE]
+> **수정본입니다.** 이 저장소([najy97/gajae-way-kakao](https://github.com/najy97/gajae-way-kakao), 브랜치 `feat/adapter-kakao`)는 [Yeachan-Heo/gajae-way](https://github.com/Yeachan-Heo/gajae-way)를 나준영(najy97)이 2026-10-28에 수정한 버전입니다. 원본 커밋 `8b3899ca4`를 기준으로 카카오톡 봇 어댑터(`packages/adapter-kakao`), `memory.capture` 스위치, 플랫폼 단위 채널 정책, `gajaeway chat --conversation/--once`, 카카오 그룹방 답장의 @멘션을 추가했습니다. AI_TOP_100 [2026]에 참가한 카카오톡 봇이 이 코드로 동작하며, 그 봇과 대화하는 사용자에게 이 저장소가 AGPL-3.0 제13조의 대응 소스(Corresponding Source)입니다. 자세한 내용은 [라이선스](#라이선스)를 보세요.
+
 <p align="center"><strong>당신의 AI는 브라우저 탭에 있으면 안 됩니다. DM에 있어야 합니다.</strong></p>
 
 gajae-way는 AI 코딩 에이전트를 **상주 페르소나**로 변환하는 런타임입니다 — Discord, Telegram, Slack에 앉아서 Markdown으로 당신을 기억하고, 스케줄에 맞춰 스스로 깨어나며, 모든 대화를 자신의 개인 머리에만 보관합니다. 새로운 장소를 확인할 필요가 없습니다 — 이미 사용 중인 곳에서 대화하면 됩니다. 선택적 로컬 `gajaeway-admin` 콘솔은 운영자용이며, 일상 채팅용이 아닙니다.
@@ -156,3 +159,9 @@ bun run release:publish   # 각 패키지를 빌드하고 패킹한 다음 해�
 ## 라이선스
 
 저작권 (C) 2026 Yeachan Heo. [GNU Affero General Public License v3.0](LICENSE) 아래에 라이선스됩니다.
+
+이 저장소의 수정 사항은 저작권 (C) 2026 나준영(najy97)에게 있으며, 원본과 같은 [GNU Affero General Public License v3.0](LICENSE)(AGPL-3.0-only)으로 배포합니다.
+
+- 원본 소스: <https://github.com/Yeachan-Heo/gajae-way>
+- 이 수정본의 소스: <https://github.com/najy97/gajae-way-kakao/tree/feat/adapter-kakao>
+- 변경 내역: `git log 8b3899ca4..feat/adapter-kakao`

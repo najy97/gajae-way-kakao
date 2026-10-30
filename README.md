@@ -15,6 +15,9 @@
   <img alt="Runtime" src="https://img.shields.io/badge/runtime-TypeScript-3178C6?logo=typescript&logoColor=white">
 </p>
 
+> [!NOTE]
+> **Modified version.** This repository ([najy97/gajae-way-kakao](https://github.com/najy97/gajae-way-kakao), branch `feat/adapter-kakao`) is a modified version of [Yeachan-Heo/gajae-way](https://github.com/Yeachan-Heo/gajae-way), changed by 나준영 (najy97) on 2026-10-28 on top of upstream commit `8b3899ca4`. It adds a Kakao Talk bot adapter (`packages/adapter-kakao`), a `memory.capture` switch, a platform-wide channel policy, `gajaeway chat --conversation/--once`, and @mentions in Kakao group replies. It runs the Kakao Talk bot entered in AI_TOP_100 [2026]; if you interact with that bot, this repository is its Corresponding Source under section 13 of the AGPL-3.0. See [License](#license).
+
 <p align="center"><strong>Your AI shouldn't live in a browser tab. It should live in your DMs.</strong></p>
 
 gajae-way is a runtime that turns an AI coding agent into a *resident persona* — one that sits in your Discord, Telegram, and Slack, remembers you in plain Markdown, wakes itself up on a schedule, and keeps every conversation in its own private head. No new place to check for ordinary conversation — you just talk to it where you already talk. An optional local `gajaeway-admin` console exists for the operator, not for everyday chat.
@@ -198,3 +201,9 @@ Inspect `dist-packed/*.tgz` from a dry run before ever running `release:publish`
 ## License
 
 Copyright (C) 2026 Yeachan Heo. Licensed under the [GNU Affero General Public License v3.0](LICENSE).
+
+Modifications in this repository are Copyright (C) 2026 나준영 (najy97) and are licensed under the same [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0-only).
+
+- Original source: <https://github.com/Yeachan-Heo/gajae-way>
+- Source of this modified version: <https://github.com/najy97/gajae-way-kakao/tree/feat/adapter-kakao>
+- Exact changes: `git log 8b3899ca4..feat/adapter-kakao`
