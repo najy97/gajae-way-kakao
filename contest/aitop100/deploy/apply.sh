@@ -19,7 +19,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 export COMPOSE_FILE="$PWD/compose.yaml"
 AGENT_DIR=/home/gajaeway/.gajaeway/broker/agent
-GJC=/opt/seed/gjc/0.19.0/bin/gjc
+# The image's pinned gjc (packages/gateway/package.json in the gajae-way source).
+GJC=/opt/seed/gjc/current/bin/gjc
 
 as_bot() { docker compose exec -T runtime setpriv --reuid=1001 --regid=1001 --init-groups "$@" </dev/null; }
 say() { printf '\n== %s\n' "$*"; }

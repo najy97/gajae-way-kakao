@@ -3,7 +3,7 @@
 Build and run files of the Kakao Talk bot entered in AI_TOP_100 [2026]. The bot runs the
 modified gajae-way in this repository; these files build it into a container image and
 operate it. Exported by `deploy/export-public.sh` from the operator's deployment repository
-at commit `c10d31fdf997`, with the same relative layout.
+at commit `64a9b8905848`, with the same relative layout.
 
 Not included: the persona (`deploy/workspace`: SOUL.md, AGENTS.md, USER.md, knowledge/),
 scenario test cases, interview tooling, and every secret.
