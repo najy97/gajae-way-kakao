@@ -50,7 +50,7 @@ services:
       - ./workspace:/contest-workspace:ro
       # model.env: ANTHROPIC_OAUTH_TOKEN=... (claude setup-token) for the fallback model.
       # The primary model (openai-codex) logs in with `apply.sh login`; its credential lives in agent.db.
-      - ./secrets:/contest-secrets:ro
+      - ./secrets/model.env:/contest-secrets/model.env:ro
     depends_on: [proxy]
     healthcheck:
       test: ["CMD", "setpriv", "--reuid=1001", "--regid=1001", "--init-groups", "gajaeway", "status"]
