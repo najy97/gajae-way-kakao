@@ -3,7 +3,7 @@
 Build and run files of the Kakao Talk bot entered in AI_TOP_100 [2026]. The bot runs the
 modified gajae-way in this repository; these files build it into a container image and
 operate it. Exported by `deploy/export-public.sh` from the operator's deployment repository
-at commit `64a9b8905848`, with the same relative layout.
+at commit `b157fe01355a`, with the same relative layout.
 
 Not included: the persona (`deploy/workspace`: SOUL.md, AGENTS.md, USER.md, knowledge/),
 scenario test cases, interview tooling, and every secret.
@@ -14,6 +14,10 @@ scenario test cases, interview tooling, and every secret.
 - `deploy/entrypoint.sh`: container roles (runtime, kakao, proxy, provision, sync).
 - `deploy/compose.yaml`: runtime on an internal network, egress only through the proxy;
   the Kakao adapter holds the bot token in its own container.
+- `deploy/action/`: action API sidecar. It alone holds the contest action token
+  (`deploy/secrets/action.env`: `ACTION_TOKEN=...`), forwards `/api/*` with one 30s budget
+  (non-GET calls are never retried after a timeout), blocks the data reset path, and serves
+  kakaocdn media and local Korean speech-to-text (faster-whisper) to the persona.
 - `deploy/tinyproxy.*`: egress allowlist (model providers and registry.npmjs.org).
 - `deploy/contest/`: gateway, broker, gjc and adapter configuration.
 - `deploy/apply.sh`: build, start, login, status, tests, watchdog.
@@ -29,7 +33,8 @@ Host: Docker with Compose v2, bash, tmux, python3 with PyYAML, sqlite3, curl
 2. `deploy/.env`: `GAJAEWAY_SRC=<absolute path of this repository's root>`
 3. Persona files in `deploy/workspace/`
 4. Optional `deploy/secrets/model.env` (`ANTHROPIC_OAUTH_TOKEN=...` for the fallback model)
-   and `deploy/secrets/alert.env` (see the header of `deploy/watchdog.sh`)
+   and `deploy/secrets/alert.env` (see the header of `deploy/watchdog.sh`); required
+   `deploy/secrets/action.env` with `ACTION_TOKEN=...` for the action sidecar
 5. `deploy/apply.sh provision`: seeds the container's gjc agent directory from a host gjc
    profile (`~/.gjc/agent`, or `GJC_SOURCE_AGENT_DIR`), with its stored logins removed.
    Install gjc on the host and run it once first.

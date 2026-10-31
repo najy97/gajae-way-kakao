@@ -40,8 +40,8 @@ services:
       HTTP_PROXY: http://proxy:8888
       https_proxy: http://proxy:8888
       http_proxy: http://proxy:8888
-      NO_PROXY: 127.0.0.1,localhost
-      no_proxy: 127.0.0.1,localhost
+      NO_PROXY: 127.0.0.1,localhost,action
+      no_proxy: 127.0.0.1,localhost,action
     volumes:
       - home:/home/gajaeway/.gajaeway
       # Separate mount: the persona owns $home but cannot rename a mountpoint away.
@@ -62,6 +62,19 @@ services:
   proxy:
     <<: *image
     command: ["proxy"]
+    networks: [internal, egress]
+
+  # Action API sidecar: holds the participant token (secrets/action.env) and forwards
+  # http://action:8080/api/... to the contest action server. The persona only sees this
+  # tokenless endpoint; the data-reset route is refused. Logs every call.
+  action:
+    build: ./action
+    image: aitop100-action:latest
+    restart: unless-stopped
+    init: true
+    env_file: ./secrets/action.env
+    volumes:
+      - ./action:/action:ro
     networks: [internal, egress]
 
   kakao:

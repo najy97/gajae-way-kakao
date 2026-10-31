@@ -1,6 +1,8 @@
-64a9b8905848
+b157fe01355a
 .gitattributes
 .gitignore
+deploy/action/Dockerfile
+deploy/action/proxy.py
 deploy/apply.sh
 deploy/compose.yaml
 deploy/contest/adapter-kakao.json
